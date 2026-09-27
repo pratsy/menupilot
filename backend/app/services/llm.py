@@ -53,8 +53,16 @@ components when inferring.
 - ingredients_source: "menu_stated" or "llm_inferred"
 - price: numeric price if present, else null
 - currency: ISO-ish currency symbol/code as seen (e.g. "EUR", "$"), else null
+- category: "food" for anything eaten as a meal/dish/side, "drink" for anything primarily drunk \
+(cocktails, wine, beer, soda, coffee, smoothies, etc.) - this matters because a drink should never be \
+presented as satisfying a request for a meal.
 
-Skip navigation text, boilerplate, and anything that isn't an actual menu item. If the text contains \
+Skip navigation text, boilerplate, and anything that isn't an actual menu item. Be skeptical of pages \
+that are NOT really a menu: if all you can find is a bare list of ingredient/category words with no \
+prices, no descriptions, and no dish names (e.g. an ingredients glossary, a nutrition/allergen page, an \
+"our sourcing" page), that is NOT a set of menu items - return {"items": []} for it rather than inventing \
+dish entries out of stray words. A genuine menu item is something an actual customer could order by name; \
+a single generic ingredient word with no price and no description almost never is. If the text contains \
 no identifiable menu items, return {"items": []}."""
 
 

@@ -14,6 +14,12 @@ def test_menu_item_llm_defaults():
     assert item.ingredients == []
     assert item.ingredients_source == "menu_stated"
     assert item.price is None
+    assert item.category == "food"
+
+
+def test_menu_item_llm_accepts_drink_category():
+    item = MenuItemLLM(translated_name="Mojito", category="drink")
+    assert item.category == "drink"
 
 
 def test_menu_extraction_result_parses_nested_items():

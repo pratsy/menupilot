@@ -256,3 +256,40 @@ def test_find_and_scrape_menu_replaces_existing_items_on_successful_refresh(monk
     with get_session() as session:
         restaurant = session.get(Restaurant, "osm:node:rp1")
         assert [mi.translated_name for mi in restaurant.menu_items] == ["New Dish"]
+
+
+def test_auto_exclusions_from_query_detects_dairy_free():
+    exclusions = tools._auto_exclusions_from_query("something tasty, dairy-free please")
+    assert "milk" in exclusions
+    assert "cheese" in exclusions
+    assert "butter" in exclusions
+
+
+def test_auto_exclusions_from_query_detects_vegan():
+    exclusions = tools._auto_exclusions_from_query("vegan dinner options")
+    assert "egg" in exclusions
+    assert "honey" in exclusions
+
+
+def test_auto_exclusions_from_query_empty_for_unrelated_query():
+    assert tools._auto_exclusions_from_query("something light and fresh") == []
+
+
+def test_semantic_search_menu_items_auto_excludes_dairy_even_without_explicit_param(monkeypatch):
+    """Regression test for a real bug seen live: the agent searched with
+    query="dairy-free" but never populated exclude_ingredients, and a dish
+    explicitly containing cheese was recommended anyway. The query-phrase
+    detection must catch this even when the caller doesn't pass exclude_ingredients."""
+    candidates = [
+        {"text": "Goat Cheese Pizza", "restaurant_id": "r1", "price": 12.0, "currency": "EUR",
+         "ingredients": "goat cheese, caramelized onion", "ingredients_source": "menu_stated", "category": "food"},
+        {"text": "Tomato Bruschetta", "restaurant_id": "r1", "price": 6.0, "currency": "EUR",
+         "ingredients": "tomato, bread, basil", "ingredients_source": "menu_stated", "category": "food"},
+    ]
+    monkeypatch.setattr(tools, "vector_search_menu_items", lambda query, restaurant_ids, n_results=20: candidates)
+    monkeypatch.setattr(tools.rerank, "rerank", lambda query, items, text_key="text", top_k=None: items)
+
+    results = tools.semantic_search_menu_items(["r1"], "dairy-free dinner options")
+
+    assert len(results) == 1
+    assert results[0]["text"] == "Tomato Bruschetta"

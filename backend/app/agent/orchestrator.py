@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Generator
 
 from openai import OpenAI
@@ -30,15 +31,26 @@ menu found), say so plainly instead of guessing.
 state it plainly. When it was inferred by you/the LLM because the menu didn't say (ingredients_source = \
 "llm_inferred"), you MUST flag it as inferred/unconfirmed, especially for anything the user is avoiding \
 for allergy reasons — tell them to double check with the restaurant.
+4b. If a dish's ingredients contradict something the user asked to avoid (an allergy, a "-free" request, a \
+dislike), DROP it from your final answer entirely — never include it "with a caveat" (e.g. never write a \
+dish into the table and then note "(contains dairy)" next to it for a dairy-free request). A caveat is for \
+genuine uncertainty (llm_inferred ingredients); a known violation of what the user asked for is not \
+uncertain, it's disqualifying, and it does not belong in the recommendation at all.
 5. Use search_restaurants to shortlist real candidates, find_and_scrape_menu to read and translate each \
 shortlisted restaurant's menu, get_reviews_for_restaurant to pull reviews, semantic_search_menu_items to \
 find dishes matching a soft preference or a hard ingredient exclusion, and semantic_search_reviews to find \
 review passages specific to what this user cares about (their dietary need, meal type, or other stated \
 preferences). Do this for a small shortlist (roughly 3-5 restaurants), not just one.
-5b. For ingredient exclusions specifically (allergies, dislikes), pass them to semantic_search_menu_items' \
-exclude_ingredients parameter rather than only relying on your own reading of the menu - that filter is \
-exact/deterministic, so it's the safer path, especially for anything allergy-related. Still mention \
-ingredients_source on whatever you end up recommending either way.
+5b. For ingredient exclusions specifically (allergies, "-free" requests, dislikes), call \
+semantic_search_menu_items ONCE across your whole shortlist with every excluded ingredient spelled out \
+explicitly in exclude_ingredients (e.g. "dairy-free" -> ['milk','cheese','butter','cream','yogurt','ghee'], \
+not just the word "dairy") rather than only relying on your own reading of the menu or a soft/semantic \
+query - that filter is exact/deterministic, so it's the safer path for anything allergy-related. Still \
+mention ingredients_source on whatever you end up recommending either way, and still apply rule 4b even to \
+items that weren't run through this filter.
+5c. Don't present a category="drink" item as an answer to a meal request (breakfast/lunch/dinner) - a \
+cocktail or soda is not a dinner option. If a restaurant's only relevant hits are drinks, that restaurant \
+doesn't have a real food option for this request; treat it the same as having none (see rule 7).
 6. Reviews come from each restaurant's OWN website (a testimonials page, or scanned off its homepage), not \
 an independent review platform - so they will almost always skew positive, since a business only publishes \
 quotes that flatter it. When get_reviews_for_restaurant returns a 'caveat', pass that caveat's substance on \
@@ -59,9 +71,16 @@ followed by a table - do not fall back to prose-only bullet points for the menu 
 <comma-separated ingredient list, ALWAYS present for every row - if ingredients_source is "llm_inferred", \
 append " (inferred, not menu-stated - confirm with restaurant)" to that cell> |
 
-Include every dish you actually looked at from find_and_scrape_menu/semantic_search_menu_items for that \
-restaurant, not just one or two examples - the table is the point, not decoration. Then a short \
-**Testimonials** section (with the skew caveat folded in) or "No testimonials found" if none.
+Include every dish that genuinely qualifies (matches the meal/diet/exclusions per rules 4b and 5c) from \
+find_and_scrape_menu/semantic_search_menu_items for that restaurant - not just one or two cherry-picked \
+examples, but also not padded with disqualified or irrelevant items just to make the table longer. Then a \
+short **Testimonials** section (with the skew caveat folded in) or "No testimonials found" if none.
+7b. Only include a restaurant's section at all if it has at least one genuinely qualifying dish after \
+applying rules 4b and 5c. A restaurant with nothing that actually fits isn't a recommendation - drop it \
+silently rather than padding your answer to hit a round number like "5 restaurants". Two solid \
+restaurants beat five where three don't actually have anything the user can eat. If NONE of your \
+shortlisted restaurants end up qualifying, say so plainly and suggest the user relax a constraint, rather \
+than presenting weak/non-compliant options anyway.
 8. Be transparent about your process as you go, but keep the final write-up focused on the recommendations \
 themselves, not a recap of your steps."""
 
@@ -76,6 +95,42 @@ def _get_history(session_id: str) -> list[dict]:
     return _sessions[session_id]
 
 
+_TABLE_ROW_RE = re.compile(r"^\|(.+)\|$")
+_HEADER_ROW_RE = re.compile(r"\bDish\b.*\bPrice\b.*\bIngredients\b", re.IGNORECASE)
+
+
+def _strip_noncompliant_dish_rows(markdown: str, excluded_ingredients: set[str]) -> str:
+    """Deterministic backstop, not just a prompt instruction: live testing showed the
+    model sometimes writes a dish into the recommendation table anyway, with a
+    self-aware "(contains dairy - not compliant)" caveat, despite an explicit rule
+    against doing exactly that. A caveat is not good enough for an allergy-adjacent
+    feature - this removes any dish-table row whose Ingredients cell mentions an
+    excluded ingredient, no matter what the model wrote around it."""
+    if not excluded_ingredients:
+        return markdown
+
+    lines = markdown.split("\n")
+    out = []
+    removed_any = False
+    for line in lines:
+        stripped = line.strip()
+        match = _TABLE_ROW_RE.match(stripped)
+        if match and "---" not in stripped and not _HEADER_ROW_RE.search(stripped):
+            cells = [c.strip() for c in match.group(1).split("|")]
+            if len(cells) >= 3 and any(ex in cells[2].lower() for ex in excluded_ingredients):
+                removed_any = True
+                continue
+        out.append(line)
+
+    result = "\n".join(out)
+    if removed_any:
+        result += (
+            "\n\n*Note: one or more dishes were removed from the recommendations above "
+            "because their ingredients conflicted with what you asked to avoid.*"
+        )
+    return result
+
+
 def _describe_call(name: str, args: dict) -> str:
     if name == "search_restaurants":
         return f"🔍 Searching restaurants in {args.get('city')} for \"{args.get('query')}\"..."
@@ -84,7 +139,10 @@ def _describe_call(name: str, args: dict) -> str:
     if name == "get_reviews_for_restaurant":
         return f"⭐ Looking for customer testimonials on {args.get('name')}'s website..."
     if name == "semantic_search_menu_items":
-        return f"🍽️ Searching the menu for \"{args.get('query')}\"..."
+        n = len(args.get("restaurant_ids") or [])
+        excl = args.get("exclude_ingredients") or []
+        excl_note = f", excluding {', '.join(excl)}" if excl else ""
+        return f"🍽️ Searching {n} restaurant's menus for \"{args.get('query')}\"{excl_note}..."
     if name == "semantic_search_reviews":
         return f"🔎 Searching reviews for \"{args.get('query')}\"..."
     return f"Running {name}..."
@@ -123,6 +181,15 @@ def run_turn(session_id: str, user_message: str) -> Generator[dict, None, None]:
     history = _get_history(session_id)
     history.append({"role": "user", "content": user_message})
 
+    # Collected from every user message this session (a constraint stated earlier in
+    # the conversation still applies) plus whatever exclude_ingredients the agent
+    # actually uses in tool calls below - the union feeds the deterministic post-filter
+    # right before the final answer ships, regardless of what the model's prose does.
+    applied_exclusions: set[str] = set()
+    for msg in history:
+        if msg.get("role") == "user":
+            applied_exclusions.update(tools._auto_exclusions_from_query(msg.get("content") or ""))
+
     for _ in range(MAX_TOOL_ITERATIONS):
         response = _client.chat.completions.create(
             model=settings.openai_model,
@@ -133,8 +200,9 @@ def run_turn(session_id: str, user_message: str) -> Generator[dict, None, None]:
         message = response.choices[0].message
 
         if not message.tool_calls:
-            history.append({"role": "assistant", "content": message.content or ""})
-            yield {"type": "message", "content": message.content or ""}
+            content = _strip_noncompliant_dish_rows(message.content or "", applied_exclusions)
+            history.append({"role": "assistant", "content": content})
+            yield {"type": "message", "content": content}
             return
 
         history.append({
@@ -152,6 +220,9 @@ def run_turn(session_id: str, user_message: str) -> Generator[dict, None, None]:
 
             yield {"type": "step", "label": _describe_call(name, args)}
             logger.info("Tool call: %s(%s)", name, args)
+
+            if name == "semantic_search_menu_items":
+                applied_exclusions.update(e.lower() for e in (args.get("exclude_ingredients") or []))
 
             impl = TOOL_IMPLS.get(name)
             try:

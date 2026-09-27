@@ -15,6 +15,7 @@ class MenuItemLLM(BaseModel):
     ingredients_source: str = "menu_stated"  # menu_stated | llm_inferred
     price: float | None = None
     currency: str | None = None
+    category: str = "food"  # food | drink
 
 
 class MenuExtractionResult(BaseModel):

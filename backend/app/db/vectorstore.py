@@ -84,7 +84,7 @@ def search_reviews(query: str, restaurant_ids: list[str], n_results: int = 8) ->
 def upsert_menu_items(items: list[dict]) -> None:
     """Batched: one embedding-API call for a whole scraped menu instead of one call per
     dish - matters a lot once menus run to 50-100+ items. Each dict needs menu_item_id,
-    restaurant_id, text, price, currency, ingredients, ingredients_source."""
+    restaurant_id, text, price, currency, ingredients, ingredients_source, category."""
     items = [i for i in items if i["text"].strip()]
     if not items:
         return
@@ -97,6 +97,7 @@ def upsert_menu_items(items: list[dict]) -> None:
             "currency": i["currency"] or "",
             "ingredients": i["ingredients"],
             "ingredients_source": i["ingredients_source"],
+            "category": i.get("category", "food"),
         } for i in items],
     )
 
@@ -129,6 +130,7 @@ def search_menu_items(query: str, restaurant_ids: list[str], n_results: int = 15
             "currency": meta.get("currency"),
             "ingredients": meta.get("ingredients"),
             "ingredients_source": meta.get("ingredients_source"),
+            "category": meta.get("category", "food"),
             "relevance": 1 - dist,
         })
     return hits

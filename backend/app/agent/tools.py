@@ -252,6 +252,7 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
                     "ingredients_source": mi.ingredients_source,
                     "price": mi.price,
                     "currency": mi.currency,
+                    "category": mi.category,
                 }
                 for mi in restaurant.menu_items
             ]
@@ -313,6 +314,7 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
                 ingredients_source=item.ingredients_source,
                 price=item.price,
                 currency=item.currency,
+                category=item.category,
                 source_url=source_url,
             )
             for item in extraction.items
@@ -326,6 +328,7 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
                 "text": f"{mi.translated_name}. {mi.translated_description}".strip(),
                 "price": mi.price, "currency": mi.currency,
                 "ingredients": mi.ingredients, "ingredients_source": mi.ingredients_source,
+                "category": mi.category,
             }
             for mi in menu_items
         ])
@@ -338,6 +341,7 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
                 "ingredients_source": mi.ingredients_source,
                 "price": mi.price,
                 "currency": mi.currency,
+                "category": mi.category,
             }
             for mi in menu_items
         ]
@@ -348,6 +352,37 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
         return {"items": items_out, "source_url": source_url, "cached": False}
 
 
+# A safety net, not just a prompt instruction: live testing showed the agent searching
+# with query="dairy-free" instead of populating exclude_ingredients, which only does a
+# *soft* similarity match for a *hard* safety constraint and let dairy-containing dishes
+# through. Rather than trust tool-calling compliance alone for an allergy-adjacent
+# feature, common diet-restriction phrases are recognized here in code and their
+# ingredient exclusions are always applied, whether or not the caller remembered to.
+_DIET_EXCLUSION_KEYWORDS: dict[str, list[str]] = {
+    # Each list includes its own trigger word too (e.g. "dairy" in the dairy list) -
+    # a menu extraction or the model's own write-up sometimes labels a dish generically
+    # ("contains dairy") rather than always naming the specific ingredient, so the
+    # generic label itself needs to be a filterable term, not just its expansions.
+    "dairy": ["dairy", "milk", "cheese", "butter", "cream", "yogurt", "yoghurt", "ghee", "paneer", "whey", "curd"],
+    "lactose": ["dairy", "milk", "cheese", "butter", "cream", "yogurt", "yoghurt", "ghee", "paneer", "whey", "curd"],
+    "gluten": ["gluten", "wheat", "flour", "bread", "pasta", "barley", "rye", "breadcrumb", "breadcrumbs", "semolina"],
+    "nut": ["nut", "peanut", "almond", "cashew", "walnut", "pistachio", "hazelnut", "pecan"],
+    "egg": ["egg", "eggs", "mayonnaise"],
+    "shellfish": ["shellfish", "shrimp", "prawn", "crab", "lobster", "mussel", "clam", "oyster", "scallop"],
+    "vegan": ["milk", "cheese", "butter", "cream", "yogurt", "egg", "eggs", "honey",
+              "meat", "chicken", "beef", "pork", "fish", "gelatin"],
+}
+
+
+def _auto_exclusions_from_query(query: str) -> list[str]:
+    q = query.lower()
+    extra: list[str] = []
+    for trigger, ingredients in _DIET_EXCLUSION_KEYWORDS.items():
+        if trigger in q:
+            extra.extend(ingredients)
+    return extra
+
+
 def semantic_search_menu_items(restaurant_ids: list[str], query: str, exclude_ingredients: list[str] | None = None) -> list[dict]:
     """Hybrid retrieval over already-scraped menu items: vector similarity for the
     *soft* part of the query (e.g. "something light and comforting"), reranked by
@@ -356,8 +391,9 @@ def semantic_search_menu_items(restaurant_ids: list[str], query: str, exclude_in
     embedding similarity, since a missed allergen is a safety issue."""
     candidates = vector_search_menu_items(query, restaurant_ids, n_results=20)
 
-    if exclude_ingredients:
-        excluded_lower = [e.lower() for e in exclude_ingredients]
+    all_exclusions = list(exclude_ingredients or []) + _auto_exclusions_from_query(query)
+    if all_exclusions:
+        excluded_lower = [e.lower() for e in all_exclusions]
         candidates = [
             c for c in candidates
             if not any(ex in (c.get("ingredients") or "").lower() for ex in excluded_lower)

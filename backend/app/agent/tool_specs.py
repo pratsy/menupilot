@@ -76,12 +76,20 @@ TOOLS = [
             "description": (
                 "Hybrid search over an already-scraped menu (call find_and_scrape_menu first): semantic "
                 "similarity for soft/descriptive intent (e.g. 'something light and fresh', 'hearty comfort "
-                "food', 'spicy street food style'), reranked against the exact query. Pass any ingredients "
-                "the user must avoid in exclude_ingredients - that's applied as an exact filter on the "
-                "stored ingredient list, not fuzzy matching, so it's safe to rely on for allergies/dislikes "
-                "(but still double-check ingredients_source on results, since 'llm_inferred' items were not "
-                "confirmed by the menu text itself). Prefer this over eyeballing the full item list yourself "
-                "when the user has a specific vibe/preference or an exclusion to apply."
+                "food', 'spicy street food style'), reranked against the exact query. Call this ONCE with "
+                "every shortlisted restaurant_id together, not once per restaurant - it already searches "
+                "across all of them in a single pass.\n"
+                "CRITICAL for allergies/intolerances/'-free' requests (dairy-free, gluten-free, nut-free, "
+                "no mushrooms, etc.): you MUST list every excluded ingredient explicitly in "
+                "exclude_ingredients (e.g. dairy-free -> ['milk','cheese','butter','cream','yogurt','ghee']) "
+                "- do NOT just put the phrase into query and rely on semantic similarity, since that's a "
+                "fuzzy match and can let disqualifying dishes through. (Common phrases like 'dairy-free' and "
+                "'gluten-free' are also auto-detected as a safety net, but don't rely on that alone - always "
+                "pass the explicit list yourself.) exclude_ingredients is an exact filter on the stored "
+                "ingredient list, so it's safe to rely on (still double-check ingredients_source on results, "
+                "since 'llm_inferred' items were not confirmed by the menu text itself, and tell the user "
+                "so for anything allergy-related). Each result also has category: 'food' or 'drink' - never "
+                "present a 'drink' item as satisfying a meal (breakfast/lunch/dinner) request."
             ),
             "parameters": {
                 "type": "object",
@@ -91,7 +99,7 @@ TOOLS = [
                     "exclude_ingredients": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Ingredients to hard-exclude, e.g. ['mushroom', 'chicken'].",
+                        "description": "Every ingredient to hard-exclude, spelled out explicitly, e.g. ['milk', 'cheese', 'butter', 'cream'] for a dairy-free request - not just the word 'dairy'.",
                     },
                 },
                 "required": ["restaurant_ids", "query"],
