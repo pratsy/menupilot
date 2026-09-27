@@ -1,0 +1,152 @@
+from app.agent import tools
+from app.db.models import MenuItem, Restaurant
+from app.db.session import get_session
+
+
+def test_looks_relevant_matches_significant_word():
+    text = "Welcome to Biocenter, a vegetarian restaurant in the heart of Barcelona."
+    assert tools._looks_relevant("Biocenter", text)
+
+
+def test_looks_relevant_rejects_unrelated_page():
+    text = "World Scholarship Forum - courses, grants and study abroad opportunities."
+    assert not tools._looks_relevant("Tapeo", text)
+
+
+def test_looks_relevant_ignores_stopwords_and_short_name():
+    # "La Bascula" -> "la" is a stopword, "bascula" is the significant word
+    text = "Bienvenidos a La Bàscula, restaurante en el Born."
+    assert tools._looks_relevant("La Bàscula", text)
+
+
+def test_candidate_quality_prefers_diet_hints_then_website_then_address():
+    best = {"diet_hints": {"diet:vegetarian": "yes"}, "website": "https://x.com", "address": "1 Main St"}
+    worst = {"diet_hints": {}, "website": None, "address": ""}
+    assert tools._candidate_quality(best) > tools._candidate_quality(worst)
+
+
+def test_resolve_restaurant_finds_by_correct_id(db_session):
+    r = Restaurant(id="osm:node:1", name="Test Place", city="Barcelona")
+    db_session.add(r)
+    db_session.flush()
+
+    resolved = tools._resolve_restaurant(db_session, "osm:node:1", "Test Place", "Barcelona")
+    assert resolved is not None
+    assert resolved.id == "osm:node:1"
+
+
+def test_resolve_restaurant_falls_back_to_name_and_city_on_bad_id(db_session):
+    r = Restaurant(id="osm:node:2", name="Sesamo", city="Barcelona")
+    db_session.add(r)
+    db_session.flush()
+
+    # model hallucinated/mistranscribed a different id string
+    resolved = tools._resolve_restaurant(db_session, "osm:node:999", "Sesamo", "Barcelona")
+    assert resolved is not None
+    assert resolved.id == "osm:node:2"
+
+
+def test_resolve_restaurant_returns_none_when_truly_unknown(db_session):
+    resolved = tools._resolve_restaurant(db_session, "osm:node:404", "Nonexistent", "Nowhere")
+    assert resolved is None
+
+
+def test_search_restaurants_shortlists_and_persists(monkeypatch):
+    many_candidates = [
+        {
+            "id": f"osm:node:{i}", "name": f"Place {i}", "address": "" if i % 2 else "1 Main St",
+            "osm_url": f"https://osm.org/node/{i}", "website": None, "phone": None,
+            "cuisine": "vegetarian", "diet_hints": {"diet:vegetarian": "yes"} if i < 3 else {},
+            "latitude": 41.0, "longitude": 2.0,
+        }
+        for i in range(30)
+    ]
+    monkeypatch.setattr(tools.osm_client, "search_restaurants", lambda city, query: many_candidates)
+
+    results = tools.search_restaurants("Barcelona", "vegetarian dinner")
+
+    assert len(results) == tools.MAX_CANDIDATES_RETURNED
+    # the diet-tagged candidates should be prioritised to the front
+    assert results[0]["diet_hints"]
+
+
+def test_search_restaurants_skips_excluded_website_domains(monkeypatch):
+    candidates = [{
+        "id": "osm:node:1", "name": "Sabes una Cosa", "address": "1 Main St",
+        "osm_url": "https://osm.org/node/1", "website": "https://linktr.ee/sabesunacosa",
+        "phone": None, "cuisine": "", "diet_hints": {}, "latitude": 41.0, "longitude": 2.0,
+    }]
+    monkeypatch.setattr(tools.osm_client, "search_restaurants", lambda city, query: candidates)
+
+    tools.search_restaurants("Barcelona", "vegetarian dinner")
+
+    from app.db.session import get_session
+    with get_session() as session:
+        restaurant = session.get(Restaurant, "osm:node:1")
+        assert restaurant.official_website is None  # linktr.ee should have been rejected
+
+
+def test_semantic_search_menu_items_applies_hard_ingredient_exclusion(monkeypatch):
+    candidates = [
+        {"text": "Mushroom risotto", "restaurant_id": "r1", "price": 12.0, "currency": "EUR",
+         "ingredients": "mushroom, rice, parmesan", "ingredients_source": "menu_stated"},
+        {"text": "Tomato bruschetta", "restaurant_id": "r1", "price": 6.0, "currency": "EUR",
+         "ingredients": "tomato, bread, basil", "ingredients_source": "menu_stated"},
+    ]
+    monkeypatch.setattr(tools, "vector_search_menu_items", lambda query, restaurant_ids, n_results=20: candidates)
+    monkeypatch.setattr(tools.rerank, "rerank", lambda query, items, text_key="text", top_k=None: items)
+
+    results = tools.semantic_search_menu_items(["r1"], "something tasty", exclude_ingredients=["mushroom"])
+
+    assert len(results) == 1
+    assert results[0]["text"] == "Tomato bruschetta"
+
+
+def test_get_known_good_restaurants_requires_actual_menu_items():
+    city = "KnownGoodCity1"
+    with get_session() as session:
+        session.add_all([
+            Restaurant(id="osm:node:kg1", name="Has Menu", city=city),
+            Restaurant(id="osm:node:kg2", name="No Menu Yet", city=city),
+        ])
+        session.flush()
+        session.add(MenuItem(restaurant_id="osm:node:kg1", translated_name="Salad"))
+
+    known_good = tools._get_known_good_restaurants(city)
+
+    names = {r["name"] for r in known_good}
+    assert names == {"Has Menu"}
+
+
+def test_search_restaurants_prioritizes_known_good_even_when_osm_misses_it(monkeypatch):
+    city = "KnownGoodCity2"
+    with get_session() as session:
+        session.add(Restaurant(id="osm:node:seeded", name="Already Scraped Place", city=city,
+                                address="1 Seed St", official_website="https://seeded.example.com"))
+        session.flush()
+        session.add(MenuItem(restaurant_id="osm:node:seeded", translated_name="Soup"))
+
+    # OSM's live query this time doesn't return the already-seeded restaurant at all
+    fresh_osm_candidates = [{
+        "id": "osm:node:fresh", "name": "Brand New Place", "address": "2 New St",
+        "osm_url": "https://osm.org/node/fresh", "website": None, "phone": None,
+        "cuisine": "", "diet_hints": {}, "latitude": 41.0, "longitude": 2.0,
+    }]
+    monkeypatch.setattr(tools.osm_client, "search_restaurants", lambda city, query: fresh_osm_candidates)
+
+    results = tools.search_restaurants(city, "vegetarian dinner")
+
+    assert results[0]["name"] == "Already Scraped Place"
+
+
+def test_semantic_search_menu_items_no_exclusion_returns_all(monkeypatch):
+    candidates = [
+        {"text": "Mushroom risotto", "restaurant_id": "r1", "price": 12.0, "currency": "EUR",
+         "ingredients": "mushroom, rice", "ingredients_source": "menu_stated"},
+    ]
+    monkeypatch.setattr(tools, "vector_search_menu_items", lambda query, restaurant_ids, n_results=20: candidates)
+    monkeypatch.setattr(tools.rerank, "rerank", lambda query, items, text_key="text", top_k=None: items)
+
+    results = tools.semantic_search_menu_items(["r1"], "risotto")
+
+    assert len(results) == 1

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Euro Food Finder</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Euro Food Finder</h1>
+      <p>Vegetarian-friendly restaurant recommendations for your trip.</p>
+    </header>
+
+    <main id="chat"></main>
+
+    <form id="composer">
+      <textarea id="input" placeholder="e.g. I'm in Barcelona, vegetarian, looking for dinner options — no mushrooms" rows="1"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
