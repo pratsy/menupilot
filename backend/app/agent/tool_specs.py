@@ -9,7 +9,11 @@ TOOLS = [
                 "the user's meal/dietary intent to form a good search query (e.g. 'vegetarian dinner', "
                 "'vegan breakfast', 'gluten-free lunch'). Results may include a diet_hints field showing "
                 "any diet-related tags found; when it's empty, the restaurant wasn't confirmed vegetarian-"
-                "friendly by map data alone, so double-check via its menu before recommending it."
+                "friendly by map data alone, so double-check via its menu before recommending it. Each "
+                "result also has menu_available: true/false - true means its menu is already scraped and "
+                "cached, so calling find_and_scrape_menu on it returns instantly with no risk of failure. "
+                "Prefer trying menu_available=true candidates before ones marked false, since a false one "
+                "may simply have no readable website."
             ),
             "parameters": {
                 "type": "object",

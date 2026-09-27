@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
 from app.agent import tools
+from app.config import settings
 from app.db.models import MenuItem, Restaurant
 from app.db.session import get_session
 
@@ -150,3 +153,73 @@ def test_semantic_search_menu_items_no_exclusion_returns_all(monkeypatch):
     results = tools.semantic_search_menu_items(["r1"], "risotto")
 
     assert len(results) == 1
+
+
+def test_in_failure_cooldown_true_for_recent_false_for_old_or_none():
+    now = datetime.now(timezone.utc)
+    recent = now - timedelta(days=1)
+    old = now - timedelta(days=settings.failure_retry_cooldown_days + 1)
+
+    assert tools._in_failure_cooldown(recent) is True
+    assert tools._in_failure_cooldown(old) is False
+    assert tools._in_failure_cooldown(None) is False
+
+
+def test_upsert_restaurant_candidates_flags_menu_available():
+    city = "MenuAvailableCity"
+    with get_session() as session:
+        session.add(Restaurant(id="osm:node:ma1", name="Has Menu", city=city))
+        session.flush()
+        session.add(MenuItem(restaurant_id="osm:node:ma1", translated_name="Soup"))
+
+    candidates = [
+        {"id": "osm:node:ma1", "name": "Has Menu", "address": "", "osm_url": "", "cuisine": "", "diet_hints": {}},
+        {"id": "osm:node:ma2", "name": "No Menu Yet", "address": "", "osm_url": "", "cuisine": "", "diet_hints": {}},
+    ]
+    results = tools.upsert_restaurant_candidates(city, candidates)
+
+    by_id = {r["id"]: r for r in results}
+    assert by_id["osm:node:ma1"]["menu_available"] is True
+    assert by_id["osm:node:ma2"]["menu_available"] is False
+
+
+def test_find_and_scrape_menu_skips_network_during_failure_cooldown(monkeypatch):
+    city = "CooldownCity"
+    with get_session() as session:
+        session.add(Restaurant(id="osm:node:cd1", name="Recently Failed", city=city,
+                                menu_attempt_failed_at=datetime.now(timezone.utc)))
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("should not attempt network discovery during cooldown")
+
+    monkeypatch.setattr(tools.web_search, "find_official_website", _boom)
+    monkeypatch.setattr(tools.scraper, "get_menu_text", _boom)
+
+    result = tools.find_and_scrape_menu("osm:node:cd1", "Recently Failed", city)
+
+    assert result["items"] == []
+    assert "recent check" in result["note"]
+
+
+def test_find_and_scrape_menu_preserves_existing_menu_on_failed_refresh(monkeypatch):
+    """A failed re-scrape (site briefly down, parse failure) must never wipe out a
+    previously-successful menu - only a successful new extraction should replace it."""
+    city = "PreserveCity"
+    stale_time = datetime.now(timezone.utc) - timedelta(days=settings.cache_freshness_days + 1)
+    with get_session() as session:
+        session.add(Restaurant(id="osm:node:pv1", name="Old Good Data", city=city,
+                                official_website="https://example.com",
+                                last_scraped_menu_at=stale_time))
+        session.flush()
+        session.add(MenuItem(restaurant_id="osm:node:pv1", translated_name="Existing Dish"))
+
+    monkeypatch.setattr(tools.scraper, "get_menu_text", lambda url: ("some raw text", url))
+    monkeypatch.setattr(tools.llm, "extract_menu_items", lambda text: tools.llm.MenuExtractionResult(items=[]))
+
+    result = tools.find_and_scrape_menu("osm:node:pv1", "Old Good Data", city)
+
+    assert result["items"] == []  # this call reports failure...
+    with get_session() as session:
+        restaurant = session.get(Restaurant, "osm:node:pv1")
+        assert len(restaurant.menu_items) == 1  # ...but the old good data is still there
+        assert restaurant.menu_items[0].translated_name == "Existing Dish"

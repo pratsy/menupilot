@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "./data/chroma"
 
     cache_freshness_days: int = 30
+    failure_retry_cooldown_days: int = 7  # how long to skip re-attempting a restaurant after a failed scrape
 
 
 settings = Settings()

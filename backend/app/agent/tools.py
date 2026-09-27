@@ -19,12 +19,25 @@ from app.services import llm, osm_client, rerank, scraper, web_search
 logger = logging.getLogger(__name__)
 
 
-def _fresh(dt: datetime | None) -> bool:
+def _within(dt: datetime | None, days: int) -> bool:
     if dt is None:
         return False
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - dt < timedelta(days=settings.cache_freshness_days)
+    return datetime.now(timezone.utc) - dt < timedelta(days=days)
+
+
+def _fresh(dt: datetime | None) -> bool:
+    return _within(dt, settings.cache_freshness_days)
+
+
+def _in_failure_cooldown(dt: datetime | None) -> bool:
+    """A shorter window than the success-freshness cache: a failed scrape (dead
+    link, no website found, JS-rendered site) is unlikely to resolve itself
+    quickly, so we skip re-attempting it on every single live query - but it's
+    also shorter than the success TTL, since transient failures (a timeout, a
+    429) are worth retrying sooner than a genuinely stale-but-working menu."""
+    return _within(dt, settings.failure_retry_cooldown_days)
 
 
 _NAME_STOPWORDS = {
@@ -113,6 +126,7 @@ def upsert_restaurant_candidates(city: str, candidates: list[dict]) -> list[dict
                 "osm_url": existing.osm_url,
                 "categories": existing.categories,
                 "diet_hints": c.get("diet_hints", {}),
+                "menu_available": bool(existing.menu_items),
             })
     return results
 
@@ -157,6 +171,14 @@ def get_reviews_for_restaurant(restaurant_id: str, name: str, city: str) -> dict
                 "caveat": "Sourced from the restaurant's own website, not an independent platform - likely skewed positive.",
             }
 
+        if _in_failure_cooldown(restaurant.review_attempt_failed_at):
+            return {"reviews": [], "note": "No testimonials found on a recent check for this restaurant; not re-attempting yet."}
+
+        def _fail(note: str) -> dict:
+            restaurant.review_attempt_failed_at = datetime.now(timezone.utc)
+            session.add(restaurant)
+            return {"reviews": [], "note": note}
+
         website = restaurant.official_website
         discovered_via_search = False
         if not website:
@@ -165,19 +187,16 @@ def get_reviews_for_restaurant(restaurant_id: str, name: str, city: str) -> dict
             restaurant.menu_website_checked = True
 
         if not website:
-            session.add(restaurant)
-            return {"reviews": [], "note": "Could not locate an official website for this restaurant."}
+            return _fail("Could not locate an official website for this restaurant.")
 
         testimonial_text_result = scraper.get_testimonial_text(website)
         if testimonial_text_result is None:
-            session.add(restaurant)
-            return {"reviews": [], "note": f"Website found ({website}) but could not be fetched."}
+            return _fail(f"Website found ({website}) but could not be fetched.")
 
         raw_text, source_url = testimonial_text_result
 
         if discovered_via_search and not _looks_relevant(name, raw_text):
-            session.add(restaurant)
-            return {"reviews": [], "note": f"Found a website ({website}) via search but it doesn't appear to actually be {name}'s site; skipping rather than risk wrong review data."}
+            return _fail(f"Found a website ({website}) via search but it doesn't appear to actually be {name}'s site; skipping rather than risk wrong review data.")
 
         restaurant.official_website = website
         extraction = llm.extract_testimonials(raw_text)
@@ -198,10 +217,11 @@ def get_reviews_for_restaurant(restaurant_id: str, name: str, city: str) -> dict
             upsert_review(review.id, restaurant.id, item.translated_text, None, item.sentiment)
             out.append({"text": review.translated_text, "sentiment": review.sentiment, "author": review.author})
 
-        session.add(restaurant)
-
         if not out:
-            return {"reviews": [], "note": "Website reached but no customer testimonials could be found on it."}
+            return _fail("Website reached but no customer testimonials could be found on it.")
+
+        restaurant.review_attempt_failed_at = None
+        session.add(restaurant)
 
         return {
             "reviews": out,
@@ -229,6 +249,14 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
             ]
             return {"items": items, "source_url": restaurant.official_website, "cached": True}
 
+        if not restaurant.menu_items and _in_failure_cooldown(restaurant.menu_attempt_failed_at):
+            return {"items": [], "note": "No menu found on a recent check for this restaurant; not re-attempting yet."}
+
+        def _fail(note: str) -> dict:
+            restaurant.menu_attempt_failed_at = datetime.now(timezone.utc)
+            session.add(restaurant)
+            return {"items": [], "note": note}
+
         website = restaurant.official_website
         discovered_via_search = False
         if not website:
@@ -237,22 +265,26 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
             restaurant.menu_website_checked = True
 
         if not website:
-            session.add(restaurant)
-            return {"items": [], "note": "Could not locate an official website for this restaurant."}
+            return _fail("Could not locate an official website for this restaurant.")
 
         menu_text_result = scraper.get_menu_text(website)
         if menu_text_result is None:
-            session.add(restaurant)
-            return {"items": [], "note": f"Website found ({website}) but could not be fetched."}
+            return _fail(f"Website found ({website}) but could not be fetched.")
 
         raw_text, source_url = menu_text_result
 
         if discovered_via_search and not _looks_relevant(name, raw_text):
-            session.add(restaurant)
-            return {"items": [], "note": f"Found a website ({website}) via search but it doesn't appear to actually be {name}'s site; skipping rather than risk wrong menu data."}
+            return _fail(f"Found a website ({website}) via search but it doesn't appear to actually be {name}'s site; skipping rather than risk wrong menu data.")
+
+        extraction = llm.extract_menu_items(raw_text)
+
+        if not extraction.items:
+            # deliberately don't touch any existing cached menu_items here - a failed
+            # re-scrape (e.g. the site is briefly down) should never wipe out
+            # previously-good data, only a successful one should replace it.
+            return _fail("Website reached but no menu items could be parsed.")
 
         restaurant.official_website = website
-        extraction = llm.extract_menu_items(raw_text)
 
         stale_ids = [mi.id for mi in restaurant.menu_items]
         for mi in restaurant.menu_items:
@@ -293,10 +325,8 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
             })
 
         restaurant.last_scraped_menu_at = datetime.now(timezone.utc)
+        restaurant.menu_attempt_failed_at = None
         session.add(restaurant)
-
-        if not items_out:
-            return {"items": [], "source_url": source_url, "note": "Website reached but no menu items could be parsed."}
 
         return {"items": items_out, "source_url": source_url, "cached": False}
 

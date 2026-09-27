@@ -30,8 +30,10 @@ class Restaurant(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     last_synced_osm_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    last_scraped_menu_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_scraped_menu_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # set only on genuine success
     menu_website_checked: Mapped[bool] = mapped_column(default=False)
+    menu_attempt_failed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_attempt_failed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
