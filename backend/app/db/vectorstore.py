@@ -41,17 +41,20 @@ _menu_items_collection = _client.get_or_create_collection(
 )
 
 
-def upsert_review(review_id: int, restaurant_id: str, text: str, rating: float | None, sentiment: str | None) -> None:
-    if not text.strip():
+def upsert_reviews(reviews: list[dict]) -> None:
+    """Batched: one embedding-API call for every review from this scrape, not one call
+    per review. Each dict needs review_id, restaurant_id, text, rating, sentiment."""
+    reviews = [r for r in reviews if r["text"].strip()]
+    if not reviews:
         return
     _reviews_collection.upsert(
-        ids=[f"review-{review_id}"],
-        documents=[text],
+        ids=[f"review-{r['review_id']}" for r in reviews],
+        documents=[r["text"] for r in reviews],
         metadatas=[{
-            "restaurant_id": restaurant_id,
-            "rating": rating if rating is not None else -1.0,
-            "sentiment": sentiment or "unknown",
-        }],
+            "restaurant_id": r["restaurant_id"],
+            "rating": r["rating"] if r["rating"] is not None else -1.0,
+            "sentiment": r["sentiment"] or "unknown",
+        } for r in reviews],
     )
 
 
@@ -78,27 +81,23 @@ def search_reviews(query: str, restaurant_ids: list[str], n_results: int = 8) ->
     return hits
 
 
-def upsert_menu_item(
-    menu_item_id: int,
-    restaurant_id: str,
-    text: str,
-    price: float | None,
-    currency: str | None,
-    ingredients: str,
-    ingredients_source: str,
-) -> None:
-    if not text.strip():
+def upsert_menu_items(items: list[dict]) -> None:
+    """Batched: one embedding-API call for a whole scraped menu instead of one call per
+    dish - matters a lot once menus run to 50-100+ items. Each dict needs menu_item_id,
+    restaurant_id, text, price, currency, ingredients, ingredients_source."""
+    items = [i for i in items if i["text"].strip()]
+    if not items:
         return
     _menu_items_collection.upsert(
-        ids=[f"menu_item-{menu_item_id}"],
-        documents=[text],
+        ids=[f"menu_item-{i['menu_item_id']}" for i in items],
+        documents=[i["text"] for i in items],
         metadatas=[{
-            "restaurant_id": restaurant_id,
-            "price": price if price is not None else -1.0,
-            "currency": currency or "",
-            "ingredients": ingredients,
-            "ingredients_source": ingredients_source,
-        }],
+            "restaurant_id": i["restaurant_id"],
+            "price": i["price"] if i["price"] is not None else -1.0,
+            "currency": i["currency"] or "",
+            "ingredients": i["ingredients"],
+            "ingredients_source": i["ingredients_source"],
+        } for i in items],
     )
 
 

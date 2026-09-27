@@ -13,7 +13,7 @@ from app.db.session import get_session
 from app.db.vectorstore import delete_menu_items_for_restaurant
 from app.db.vectorstore import search_menu_items as vector_search_menu_items
 from app.db.vectorstore import search_reviews as vector_search_reviews
-from app.db.vectorstore import upsert_menu_item, upsert_review
+from app.db.vectorstore import upsert_menu_items, upsert_reviews
 from app.services import llm, osm_client, rerank, scraper, web_search
 
 logger = logging.getLogger(__name__)
@@ -204,9 +204,11 @@ def get_reviews_for_restaurant(restaurant_id: str, name: str, city: str) -> dict
         restaurant.official_website = website
         extraction = llm.extract_testimonials(raw_text)
 
-        out = []
-        for item in extraction.items:
-            review = Review(
+        if not extraction.items:
+            return _fail("Website reached but no customer testimonials could be found on it.")
+
+        reviews = [
+            Review(
                 restaurant_id=restaurant.id,
                 source="website_testimonial",
                 author=item.author,
@@ -215,13 +217,17 @@ def get_reviews_for_restaurant(restaurant_id: str, name: str, city: str) -> dict
                 translated_text=item.translated_text,
                 sentiment=item.sentiment,
             )
-            session.add(review)
-            session.flush()  # get review.id
-            upsert_review(review.id, restaurant.id, item.translated_text, None, item.sentiment)
-            out.append({"text": review.translated_text, "sentiment": review.sentiment, "author": review.author})
+            for item in extraction.items
+        ]
+        session.add_all(reviews)
+        session.flush()  # assigns .id to every review in one round-trip
 
-        if not out:
-            return _fail("Website reached but no customer testimonials could be found on it.")
+        upsert_reviews([
+            {"review_id": r.id, "restaurant_id": restaurant.id, "text": r.translated_text,
+             "rating": None, "sentiment": r.sentiment}
+            for r in reviews
+        ])
+        out = [{"text": r.translated_text, "sentiment": r.sentiment, "author": r.author} for r in reviews]
 
         restaurant.review_attempt_failed_at = None
 
@@ -296,9 +302,8 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
         session.flush()
         delete_menu_items_for_restaurant(stale_ids)
 
-        items_out = []
-        for item in extraction.items:
-            menu_item = MenuItem(
+        menu_items = [
+            MenuItem(
                 restaurant_id=restaurant.id,
                 original_name=item.original_name,
                 original_description=item.original_description,
@@ -310,23 +315,32 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
                 currency=item.currency,
                 source_url=source_url,
             )
-            session.add(menu_item)
-            session.flush()  # get menu_item.id
+            for item in extraction.items
+        ]
+        session.add_all(menu_items)
+        session.flush()  # assigns .id to every row in one round-trip, instead of per-item
 
-            embedding_text = f"{item.translated_name}. {item.translated_description}".strip()
-            upsert_menu_item(
-                menu_item.id, restaurant.id, embedding_text,
-                item.price, item.currency, ", ".join(item.ingredients), item.ingredients_source,
-            )
+        upsert_menu_items([
+            {
+                "menu_item_id": mi.id, "restaurant_id": restaurant.id,
+                "text": f"{mi.translated_name}. {mi.translated_description}".strip(),
+                "price": mi.price, "currency": mi.currency,
+                "ingredients": mi.ingredients, "ingredients_source": mi.ingredients_source,
+            }
+            for mi in menu_items
+        ])
 
-            items_out.append({
-                "name": item.translated_name,
-                "description": item.translated_description,
-                "ingredients": item.ingredients,
-                "ingredients_source": item.ingredients_source,
-                "price": item.price,
-                "currency": item.currency,
-            })
+        items_out = [
+            {
+                "name": mi.translated_name,
+                "description": mi.translated_description,
+                "ingredients": mi.ingredients.split(", ") if mi.ingredients else [],
+                "ingredients_source": mi.ingredients_source,
+                "price": mi.price,
+                "currency": mi.currency,
+            }
+            for mi in menu_items
+        ]
 
         restaurant.last_scraped_menu_at = datetime.now(timezone.utc)
         restaurant.menu_attempt_failed_at = None

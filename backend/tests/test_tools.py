@@ -247,7 +247,7 @@ def test_find_and_scrape_menu_replaces_existing_items_on_successful_refresh(monk
             MenuItemLLM(translated_name="New Dish", ingredients=["tomato", "basil"]),
         ]),
     )
-    monkeypatch.setattr(tools, "upsert_menu_item", lambda *args, **kwargs: None)  # avoid a real embedding call
+    monkeypatch.setattr(tools, "upsert_menu_items", lambda *args, **kwargs: None)  # avoid a real embedding call
     monkeypatch.setattr(tools, "delete_menu_items_for_restaurant", lambda ids: None)
 
     result = tools.find_and_scrape_menu("osm:node:rp1", "Refreshed Place", city)
