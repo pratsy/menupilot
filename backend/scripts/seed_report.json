@@ -1,0 +1,373 @@
+{
+  "cities": [
+    {
+      "city": "Barcelona",
+      "attempted": 25,
+      "succeeded": [
+        {
+          "id": "osm:node:704035994",
+          "name": "Hard Rock Cafe",
+          "menu_items": 45,
+          "testimonials": 0,
+          "website": "https://www.hardrockcafe.com/location/barcelona/"
+        },
+        {
+          "id": "osm:node:2435572563",
+          "name": "Cafeter\u00eda Pizzer\u00eda Afrika",
+          "menu_items": 21,
+          "testimonials": 0,
+          "website": "https://www.barafrika.com/"
+        },
+        {
+          "id": "osm:node:2618538595",
+          "name": "Biocenter",
+          "menu_items": 43,
+          "testimonials": 0,
+          "website": "https://restaurantebiocenter.es/carta-menu"
+        }
+      ],
+      "failed": [
+        {
+          "name": "Simbad - Feteria",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Sabes una Cosa",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Tapa Tapa",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Honest Greens",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "La Vietnamita",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Tapas 24",
+          "reason": "Website found (http://www.carlesabellan.com/mis-restaurantes/tapas-24/) but could not be fetched."
+        },
+        {
+          "name": "7 Portes",
+          "reason": "Website found (https://7portes.com/catala/index2.php) but could not be fetched."
+        },
+        {
+          "name": "Culleres",
+          "reason": "Website found (https://www.culleres.com/) but could not be fetched."
+        },
+        {
+          "name": "Market Restaurant",
+          "reason": "Website found (http://www.markethotel.com.es/) but could not be fetched."
+        },
+        {
+          "name": "Tapeo",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Mimos Born",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Sol soler",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Balmes / Rossell\u00f3",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Sesamo",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Abiss\u00ednia",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Sopa",
+          "reason": "Website found (https://www.sopa.vg/) but could not be fetched."
+        },
+        {
+          "name": "Dionisos",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "La Riera",
+          "reason": "Website found (http://www.vegetarialariera.com) but could not be fetched."
+        },
+        {
+          "name": "\u00a1Hola Nepal!",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Con Gracia",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Vegetalia",
+          "reason": "Website found (https://www.restaurantvegetalia.com/) but could not be fetched."
+        },
+        {
+          "name": "Veg World India",
+          "reason": "Could not locate an official website for this restaurant."
+        }
+      ]
+    },
+    {
+      "city": "Rome",
+      "attempted": 25,
+      "succeeded": [
+        {
+          "id": "osm:node:1135464611",
+          "name": "Washington",
+          "menu_items": 13,
+          "testimonials": 0,
+          "website": "https://en.caffewashington.com/menu"
+        },
+        {
+          "id": "osm:node:1688847325",
+          "name": "Gran Caffe Martini & Rossi",
+          "menu_items": 53,
+          "testimonials": 0,
+          "website": "https://www.caffemartiniroma.com/wp-content/uploads/2026/07/food-2024.pdf"
+        },
+        {
+          "id": "osm:node:3324218803",
+          "name": "Dao Bistrot",
+          "menu_items": 10,
+          "testimonials": 0,
+          "website": "https://daobistrot.it/wp-content/uploads/2025/07/menu-dao-bistrot-jonio.pdf"
+        },
+        {
+          "id": "osm:node:3739018875",
+          "name": "Otello",
+          "menu_items": 1,
+          "testimonials": 1,
+          "website": "https://www.trastevere-trattoria-otello.it/#menu"
+        }
+      ],
+      "failed": [
+        {
+          "name": "Sichuan Haozi",
+          "reason": "Found a website (https://wheelofnames.com/) via search but it doesn't appear to actually be Sichuan Haozi's site; skipping rather than risk wrong menu data."
+        },
+        {
+          "name": "Pizzeria Formula 1",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "L'insalatiera",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Old Wild West",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "The Burger Factory Roma",
+          "reason": "Website found (https://the-burger-factory-roma.business.site/) but could not be fetched."
+        },
+        {
+          "name": "Il Margutta veggy food & art",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "deRione",
+          "reason": "Website found (https://derione.com/) but could not be fetched."
+        },
+        {
+          "name": "Officina Alimentare San Paolo",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Il Fiorentino",
+          "reason": "Website found (https://www.icicilombard.com/il-takecare-app) but could not be fetched."
+        },
+        {
+          "name": "Pummarola e Drink",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Ristorante Esperia",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "All'antica torretta",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Sushi House Roma",
+          "reason": "Website found (https://sushi-house-take-away.business.site/) but could not be fetched."
+        },
+        {
+          "name": "Propaganda Italian Cusine",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Nativa Ristorante",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Tenmaya",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Andrea",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Old Wild West",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Giselda Forno",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Ristorante Giapponese Sush'Amo",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Pizzamania",
+          "reason": "Could not locate an official website for this restaurant."
+        }
+      ]
+    },
+    {
+      "city": "Berlin",
+      "attempted": 25,
+      "succeeded": [
+        {
+          "id": "osm:node:36310174",
+          "name": "La Foresta (Schatulle)",
+          "menu_items": 6,
+          "testimonials": 3,
+          "website": "https://www.laforesta-volksparkrehberge.de/speisekarte"
+        },
+        {
+          "id": "osm:node:89274696",
+          "name": "Aapka",
+          "menu_items": 50,
+          "testimonials": 0,
+          "website": "https://www.aapka.de/menu/"
+        },
+        {
+          "id": "osm:node:89275135",
+          "name": "Mutter Hoppe",
+          "menu_items": 8,
+          "testimonials": 0,
+          "website": "https://www.mutterhoppe.de/speisen-and-getraenke/nachtschwaermerkarte/"
+        },
+        {
+          "id": "osm:node:115546494",
+          "name": "Mensa HU Oase Adlershof",
+          "menu_items": 17,
+          "testimonials": 0,
+          "website": "https://www.stw.berlin/mensen/mensa-hu-oase-adlershof.html"
+        },
+        {
+          "id": "osm:node:268484615",
+          "name": "Andaz",
+          "menu_items": 75,
+          "testimonials": 0,
+          "website": "https://andazberlin.de/"
+        },
+        {
+          "id": "osm:node:268998367",
+          "name": "Xantener Eck",
+          "menu_items": 78,
+          "testimonials": 0,
+          "website": "https://das-xantener-eck.de/speisekarte"
+        },
+        {
+          "id": "osm:node:269675644",
+          "name": "Da Ponte",
+          "menu_items": 4,
+          "testimonials": 0,
+          "website": "https://daponte-berlin.de/#karte"
+        },
+        {
+          "id": "osm:node:269712300",
+          "name": "Schleusenkrug",
+          "menu_items": 27,
+          "testimonials": 0,
+          "website": "https://www.schleusenkrug.de/speisekarte"
+        }
+      ],
+      "failed": [
+        {
+          "name": "Ristorante Salve",
+          "reason": "Website found (https://www.ristorantesalveberlin.de/) but could not be fetched."
+        },
+        {
+          "name": "Beast Berlin",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Carambar",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Azem",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "I Due Forni",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Coronita",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Seepalast",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Yogi-Haus",
+          "reason": "Website found (http://www.restaurant-yogihaus.de/) but could not be fetched."
+        },
+        {
+          "name": "Eden",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Garcon",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Schoenbrunn",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Hangmee",
+          "reason": "Could not locate an official website for this restaurant."
+        },
+        {
+          "name": "Gastst\u00e4tte zur S-Bahn",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Khao Thai",
+          "reason": "Website found (https://www.sidathai.de) but could not be fetched."
+        },
+        {
+          "name": "Shaan",
+          "reason": "Website reached but no menu items could be parsed."
+        },
+        {
+          "name": "Trattoria Fidelia",
+          "reason": "Website found (https://pages.resmio.com/trattoria-fidelia/en) but could not be fetched."
+        },
+        {
+          "name": "Zollpackhof",
+          "reason": "Website reached but no menu items could be parsed."
+        }
+      ]
+    }
+  ]
+}
