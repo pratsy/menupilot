@@ -15,10 +15,12 @@ de temporada."
   showed up in a search."
 - **Reads the menu for you** — scrapes the restaurant's actual site, translates every dish
   into English, and tells you the price in the local currency.
-- **Knows what's in your food.** Ask for "something light, no mushrooms" and it filters
-  dishes by real extracted ingredients, not vibes — and it's upfront when an ingredient
-  is a best guess rather than something the menu actually states, which matters if you're
-  asking because of an allergy.
+- **Knows what's in your food.** Ask for "something light, no mushrooms" or "dairy-free" and
+  it filters dishes by real extracted ingredients, not vibes — enforced twice, once as a
+  search filter and once again as a final check on its own answer, so a disqualifying dish
+  can't slip through even if it forgets to filter it the first time. It's upfront when an
+  ingredient is a best guess (marked once, not repeated on every line) rather than something
+  the menu actually states, which matters if you're asking because of an allergy.
 - **Tells you what other diners think**, pulled from the restaurant's own site, sentiment
   and all — and it's honest that this isn't the same as an independent review platform.
 - **Shows its work.** Every search, every page it reads, every filter it applies streams

@@ -61,17 +61,54 @@ Conversation state is kept in-process, keyed by a client-generated `session_id`.
 
 This is the property the whole design optimizes for, because a restaurant recommendation
 agent that hallucinates a dish, a price, or a review isn't a lesser version of the product —
-it's actively dangerous for anyone with an allergy. Three mechanisms enforce it:
+it's actively dangerous for anyone with an allergy.
 
 - **System prompt contract**: the model is explicitly instructed to only state facts that came
   from a tool result, and to say "not found" rather than infer when a tool comes back empty.
 - **Ingredient provenance tracking**: every extracted ingredient is tagged `menu_stated` or
-  `llm_inferred` at extraction time (`schemas.py::MenuItemLLM`), carried through storage, and
-  the agent is instructed to flag inferred ingredients explicitly rather than state them with
-  false confidence.
+  `llm_inferred` at extraction time (`schemas.py::MenuItemLLM`), carried through storage. The
+  final answer marks a `menu_stated` row with a compact `✓` rather than repeating a caveat
+  sentence on every inferred row (that got noisy fast once a response covered several
+  restaurants) — a single footnote at the end of the message explains what `✓` means once.
 - **Hard filtering for exclusions**: an excluded ingredient (allergy, dislike) is enforced as
   an exact string match against the stored ingredient list, never left to the LLM's judgment
   or to vector-similarity fuzziness. See **Retrieval design** below.
+
+#### Prompt instructions alone were not enough — defense in depth, found the hard way
+
+Live testing surfaced a real failure: asked for dairy-free food, the agent searched
+`semantic_search_menu_items` with `query="dairy-free"` instead of populating
+`exclude_ingredients`, so a *soft* similarity match stood in for a *hard* safety constraint and
+a goat-cheese pizza got recommended. Worse, in a later run the model correctly identified a dish
+as containing dairy, wrote `"(contains dairy - not compliant)"` right next to it in the table —
+and included it anyway. A clear, explicit system-prompt rule against exactly that ("drop it,
+never caveat it") was already in place when this happened. It wasn't enough.
+
+The fix wasn't more prompt text; it was moving enforcement out of the prompt and into code that
+can't be talked out of it, on both ends of the pipeline:
+
+- **Before retrieval** (`tools.py::_auto_exclusions_from_query`): common diet-restriction
+  phrases (dairy, lactose, gluten, nut, egg, shellfish, vegan) are pattern-matched in the query
+  text itself and their ingredient exclusions are *always* applied in
+  `semantic_search_menu_items`, whether or not the caller remembered to pass
+  `exclude_ingredients` explicitly.
+- **After generation** (`orchestrator.py::_strip_noncompliant_dish_rows`): a regex pass over the
+  model's own finished markdown removes any dish-table row whose Ingredients cell mentions an
+  excluded ingredient — regardless of what caveat the model wrote around it. Exclusions are
+  collected from every user message in the session (a constraint from three turns ago still
+  applies) unioned with whatever the agent actually passed to `exclude_ingredients` during the
+  turn.
+- Two related structural rules got the same treatment after the same kind of prompt-only
+  failure: `_strip_empty_placeholder_rows` removes a `"— | — | —"` row the model sometimes wrote
+  for a restaurant with nothing to recommend, and `_drop_empty_restaurant_sections` removes that
+  restaurant's header/address block entirely once its table has nothing real left in it — rather
+  than trusting the prompt's "don't pad the response" instruction on its own.
+
+The general lesson, applied narrowly here rather than universally: **a system-prompt rule is a
+request, not a guarantee — anything safety-critical (allergens, fabricated data) needs a
+deterministic check downstream of the model, not just a clearly-worded instruction to it.**
+Softer, non-safety concerns (tone, section ordering, which testimonial to quote) are still left
+to the prompt, where imperfect compliance is a quality issue, not a hazard.
 
 ## Data pipeline
 
@@ -192,10 +229,14 @@ is a quality improvement, not a correctness dependency.
 calls mocked — fast, deterministic, no network or API cost: the relevance guard, candidate
 shortlisting, the known-good prioritization merge, the id-mismatch fallback resolver, the
 Overpass query builder, menu/testimonial link discovery, schema validation, the retry decorator,
-and reranking (including its fallback
-path). It deliberately does not try to assert against real scraped websites, since that's
-inherently non-deterministic — those paths were instead verified live during development against
-real restaurant sites and are documented as a known limitation rather than "tested."
+reranking (including its fallback path), the diet-phrase auto-exclusion detector, and the
+output-side deterministic filters (`test_orchestrator.py`: stripping non-compliant rows,
+placeholder rows, and empty restaurant sections — including a regression test built directly
+from the real "caveat instead of dropping" failure described above, and one that would have
+caught the empty-preamble `IndexError` that same fix briefly introduced). It deliberately does
+not try to assert against real scraped websites, since that's inherently non-deterministic —
+those paths were instead verified live during development against real restaurant sites and are
+documented as a known limitation rather than "tested."
 
 ## Tech stack
 
@@ -221,3 +262,4 @@ real restaurant sites and are documented as a known limitation rather than "test
 | LLM-based reranking | Dedicated cross-encoder reranker model | No new model/infra dependency; acceptable quality/cost tradeoff at this volume (revisit at scale — see SCALING.md). |
 | In-process tool-calling loop | LangChain / OpenAI Assistants API | Full control over per-step streaming to the UI, which is a core product requirement, not an implementation detail. |
 | Offline seed script + known-good prioritization | Hand-picking restaurant names/URLs; a static hard-coded fixture; a paid structured-menu API | Live scraping mid-conversation is inherently probabilistic (JS-heavy sites, dead links). Hand-picking names isn't reproducible or auditable. The candidates surveyed (Documenu, TheFork, Zomato's public API) turned out to be US-only, partnership-only, or discontinued for open access respectively. Running the *same* real pipeline offline, with no latency pressure, and keeping only what actually works, stays honest (still real scraped data) and reproducible (rerunnable, reports what it kept/skipped) without a new dependency. |
+| Deterministic post-filters on the model's own output | Stronger/more explicit system-prompt wording only | Tried the prompt-only version first (an explicit "drop it, never caveat it" rule). It still failed live - the model wrote a dairy-containing dish into the table with a self-aware "not compliant" caveat instead of omitting it. A regex pass that structurally cannot be reasoned around closes the gap a clearer sentence couldn't. |

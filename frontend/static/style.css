@@ -91,8 +91,46 @@ header p {
 .bubble p:first-child { margin-top: 0; }
 .bubble p:last-child { margin-bottom: 0; }
 .bubble a { color: var(--accent); }
-.bubble h1, .bubble h2, .bubble h3 { font-size: 15px; margin: 10px 0 6px; }
+.bubble h1, .bubble h2, .bubble h3 { font-size: 15px; margin: 14px 0 6px; }
+.bubble h3:first-child { margin-top: 0; }
 .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
+.bubble hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+.bubble table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 4px;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.bubble th,
+.bubble td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--border);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.bubble th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.bubble tr:last-child td { border-bottom: none; }
+
+/* Dish | Price | Ingredients: keep name/price compact, let ingredients wrap */
+.bubble th:nth-child(1), .bubble td:nth-child(1) { width: 26%; }
+.bubble th:nth-child(2), .bubble td:nth-child(2) { width: 16%; white-space: nowrap; }
+.bubble th:nth-child(3), .bubble td:nth-child(3) { width: 58%; color: var(--muted); }
+
+.bubble em { color: var(--muted); font-size: 12.5px; }
 
 .steps {
   display: flex;

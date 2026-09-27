@@ -1,4 +1,8 @@
-from app.agent.orchestrator import _strip_noncompliant_dish_rows
+from app.agent.orchestrator import (
+    _drop_empty_restaurant_sections,
+    _strip_empty_placeholder_rows,
+    _strip_noncompliant_dish_rows,
+)
 
 TABLE = """### Cafeteria Afrika
 **Address:** somewhere
@@ -54,3 +58,67 @@ def test_real_world_regression_agent_caveated_instead_of_dropping():
     result = _strip_noncompliant_dish_rows(markdown, {"dairy", "milk", "cheese", "butter", "cream", "yogurt", "ghee"})
     assert "Kebab" not in result
     assert "Entrecote with Potatoes" in result
+
+
+def test_strips_fully_empty_placeholder_row():
+    markdown = (
+        "| Dish | Price | Ingredients |\n"
+        "|---|---|---|\n"
+        "| — | — | — |\n"
+        "| Tomato Soup | 5.90 € | tomato, basil |\n"
+    )
+    result = _strip_empty_placeholder_rows(markdown)
+    assert "| — | — | — |" not in result
+    assert "Tomato Soup" in result
+
+
+def test_strips_empty_row_regardless_of_dash_style():
+    markdown = "| Dish | Price | Ingredients |\n|---|---|---|\n| - | – | |\n"
+    result = _strip_empty_placeholder_rows(markdown)
+    assert "| - | – | |" not in result
+
+
+def test_drops_restaurant_section_with_only_placeholder_row():
+    """Regression test for a real bug seen live: a restaurant with zero qualifying
+    dishes still got a full header/address/table shown, just with a "— | — | —" row
+    instead of being omitted entirely."""
+    markdown = (
+        "### Empty Place\n"
+        "**Address:** 1 Nowhere St\n\n"
+        "| Dish | Price | Ingredients |\n"
+        "|---|---|---|\n"
+        "| — | — | — |\n\n"
+        "### Good Place\n"
+        "**Address:** 2 Somewhere St\n\n"
+        "| Dish | Price | Ingredients |\n"
+        "|---|---|---|\n"
+        "| Tomato Soup | 5.90 € | tomato, basil |\n"
+    )
+    result = _drop_empty_restaurant_sections(_strip_empty_placeholder_rows(markdown))
+    assert "Empty Place" not in result
+    assert "Good Place" in result
+    assert "Tomato Soup" in result
+
+
+def test_drops_restaurant_section_with_no_table_at_all():
+    markdown = "### Empty Place\n**Address:** somewhere\n\nNothing found here.\n\n### Good Place\n**Address:** elsewhere\n\n| Dish | Price | Ingredients |\n|---|---|---|\n| Soup | 5 € | tomato |\n"
+    # a section with no table isn't dropped by this function (it has nothing to judge
+    # "qualifying" against) - that's the system prompt's job to not write it in the
+    # first place; this backstop only catches the "table with nothing real in it" case
+    result = _drop_empty_restaurant_sections(markdown)
+    assert "Good Place" in result
+
+
+def test_keeps_trailing_footnote_even_if_last_restaurant_is_dropped():
+    """The footnote must survive even when it directly follows the restaurant section
+    that gets dropped, since it's textually the last thing in the message."""
+    markdown = (
+        "### Good Place\n**Address:** somewhere\n\n"
+        "| Dish | Price | Ingredients |\n|---|---|---|\n| Soup | 5 € | tomato |\n\n"
+        "### Empty Place\n**Address:** elsewhere\n\n"
+        "| Dish | Price | Ingredients |\n|---|---|---|\n| — | — | — |\n\n"
+        "*✓ = ingredient list confirmed on the restaurant's own menu; everything else is inferred.*"
+    )
+    result = _drop_empty_restaurant_sections(_strip_empty_placeholder_rows(markdown))
+    assert "Empty Place" not in result
+    assert "✓ = ingredient list confirmed" in result

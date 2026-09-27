@@ -121,6 +121,23 @@ This is the part that's less "add infrastructure" and more "the product itself c
   many restaurants is a crawler-infrastructure incident, not background noise, and needs to page
   someone rather than just degrade individual chat responses gracefully forever.
 
+## The output-safety layer will need to graduate past regex
+
+Live testing found that a system-prompt rule alone isn't reliable enough for safety-critical
+behavior (a dish that violates a stated allergen exclusion getting written into the answer
+anyway, just with a caveat next to it) - see ARCHITECTURE.md's "defense in depth" section. The
+fix that shipped is a set of regex passes over the model's finished markdown that strip
+non-compliant rows, empty placeholder rows, and now-empty restaurant sections. That's the right
+fast fix for the current scope, and it's genuinely deterministic where it matters (an excluded
+ingredient cannot survive to the user), but regex-over-markdown is inherently coupled to the
+exact table format the prompt asks for - a wording change that drifts the model's output shape
+could silently make the filter stop matching. At real scale this should graduate to **structured
+output for the final answer** (the model returns a typed list of {restaurant, dish, price,
+ingredients} objects, validated and filtered in code, e.g. an excluded-ingredient dish literally
+cannot be constructed into that structure) **with deterministic template rendering** turning that
+into markdown/HTML afterward - the same safety property, without depending on text pattern-
+matching against free-form prose.
+
 ## What doesn't need to change
 
 Worth naming explicitly, since not everything here is a rewrite: the **agent's honesty

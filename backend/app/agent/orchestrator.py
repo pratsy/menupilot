@@ -68,13 +68,20 @@ followed by a table - do not fall back to prose-only bullet points for the menu 
 | Dish | Price | Ingredients |
 |---|---|---|
 | <translated name, original name in parentheses if useful> | <price + currency, or "—" if unknown> | \
-<comma-separated ingredient list, ALWAYS present for every row - if ingredients_source is "llm_inferred", \
-append " (inferred, not menu-stated - confirm with restaurant)" to that cell> |
+<comma-separated ingredient list, ALWAYS present for every row. If ingredients_source is "menu_stated", \
+append " ✓" to the cell (nothing else). If it's "llm_inferred", append NOTHING per-row - do not repeat a \
+caveat sentence on every line, that's noise once you're recommending multiple dishes across several \
+restaurants.> |
 
 Include every dish that genuinely qualifies (matches the meal/diet/exclusions per rules 4b and 5c) from \
 find_and_scrape_menu/semantic_search_menu_items for that restaurant - not just one or two cherry-picked \
 examples, but also not padded with disqualified or irrelevant items just to make the table longer. Then a \
 short **Testimonials** section (with the skew caveat folded in) or "No testimonials found" if none.
+7c. End the WHOLE message (once, after every restaurant section, not per-table) with a single line: \
+"*✓ = ingredient list confirmed on the restaurant's own menu; everything else is inferred from the dish \
+name and not confirmed - always double check with the restaurant, especially for allergies.*" Skip this \
+line only if every single ingredient across every dish you showed was menu_stated (i.e. nothing was \
+inferred at all).
 7b. Only include a restaurant's section at all if it has at least one genuinely qualifying dish after \
 applying rules 4b and 5c. A restaurant with nothing that actually fits isn't a recommendation - drop it \
 silently rather than padding your answer to hit a round number like "5 restaurants". Two solid \
@@ -129,6 +136,66 @@ def _strip_noncompliant_dish_rows(markdown: str, excluded_ingredients: set[str])
             "because their ingredients conflicted with what you asked to avoid.*"
         )
     return result
+
+
+_EMPTY_CELL_VALUES = {"", "—", "-", "–"}
+_SECTION_HEADER_RE = re.compile(r"^###\s+")
+_FOOTNOTE_START_RE = re.compile(r"^\*[✓✓]\s*=\s*ingredient")
+
+
+def _strip_empty_placeholder_rows(markdown: str) -> str:
+    """The system prompt says to omit a restaurant with nothing qualifying, not to
+    include it with a "— | — | —" placeholder row - but the model does this sometimes
+    anyway. Remove any data row where every cell is blank/a dash before it's ever shown."""
+    lines = markdown.split("\n")
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        match = _TABLE_ROW_RE.match(stripped)
+        if match and "---" not in stripped and not _HEADER_ROW_RE.search(stripped):
+            cells = [c.strip() for c in match.group(1).split("|")]
+            if cells and all(c in _EMPTY_CELL_VALUES for c in cells):
+                continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def _drop_empty_restaurant_sections(markdown: str) -> str:
+    """A restaurant section with zero genuinely qualifying dishes should never appear
+    at all - but live testing showed the model sometimes still emits the header/
+    address/table shell for one anyway (with nothing, or only placeholder rows, inside
+    it once _strip_empty_placeholder_rows has run). This drops the whole shell. Trailing
+    content after the last restaurant (the ✓-marker footnote) is protected by treating
+    it as its own section, so dropping an empty last restaurant can't eat it."""
+    lines = markdown.split("\n")
+
+    sections: list[list[str]] = [[]]  # index 0 = any preamble before the first heading
+    for line in lines:
+        stripped = line.strip()
+        if _SECTION_HEADER_RE.match(stripped) or (_FOOTNOTE_START_RE.match(stripped) and len(sections) > 1):
+            sections.append([line])
+        else:
+            sections[-1].append(line)
+
+    def _has_qualifying_row(section: list[str]) -> bool:
+        has_table = False
+        for line in section:
+            stripped = line.strip()
+            if _HEADER_ROW_RE.search(stripped):
+                has_table = True
+                continue
+            match = _TABLE_ROW_RE.match(stripped)
+            if match and "---" not in stripped and not _HEADER_ROW_RE.search(stripped):
+                cells = [c.strip() for c in match.group(1).split("|")]
+                if any(c not in _EMPTY_CELL_VALUES for c in cells):
+                    return True
+        return not has_table  # sections with no table at all (intro/closing text) are never dropped
+
+    kept = [
+        section for section in sections
+        if not section or not _SECTION_HEADER_RE.match(section[0].strip()) or _has_qualifying_row(section)
+    ]
+    return "\n".join(line for section in kept for line in section)
 
 
 def _describe_call(name: str, args: dict) -> str:
@@ -201,6 +268,8 @@ def run_turn(session_id: str, user_message: str) -> Generator[dict, None, None]:
 
         if not message.tool_calls:
             content = _strip_noncompliant_dish_rows(message.content or "", applied_exclusions)
+            content = _strip_empty_placeholder_rows(content)
+            content = _drop_empty_restaurant_sections(content)
             history.append({"role": "assistant", "content": content})
             yield {"type": "message", "content": content}
             return
