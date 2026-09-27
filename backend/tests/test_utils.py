@@ -4,9 +4,9 @@ import pytest
 from app.utils import retry_on_transient_error
 
 
-def _response(status_code: int) -> httpx.Response:
+def _response(status_code: int, headers: dict | None = None) -> httpx.Response:
     request = httpx.Request("GET", "https://example.com")
-    return httpx.Response(status_code=status_code, request=request)
+    return httpx.Response(status_code=status_code, request=request, headers=headers or {})
 
 
 def test_retries_transient_transport_error_then_succeeds(monkeypatch):
@@ -65,3 +65,39 @@ def test_retries_server_errors(monkeypatch):
 
     assert server_error_then_ok() == "recovered"
     assert calls["n"] == 2
+
+
+def test_retries_429_rate_limit_unlike_other_4xx(monkeypatch):
+    """A bare 429 with no other status < 500 must still retry - it's the canonical
+    case retry-with-backoff exists for, not a permanent client error like a 404."""
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    calls = {"n": 0}
+
+    @retry_on_transient_error(retries=1)
+    def rate_limited_then_ok():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.HTTPStatusError("rate limited", request=httpx.Request("GET", "https://x"), response=_response(429))
+        return "ok"
+
+    assert rate_limited_then_ok() == "ok"
+    assert calls["n"] == 2
+
+
+def test_honors_retry_after_header_on_429(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr("time.sleep", lambda seconds: sleeps.append(seconds))
+    calls = {"n": 0}
+
+    @retry_on_transient_error(retries=1, base_delay=1.5)
+    def rate_limited_then_ok():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.HTTPStatusError(
+                "rate limited", request=httpx.Request("GET", "https://x"),
+                response=_response(429, headers={"retry-after": "9"}),
+            )
+        return "ok"
+
+    assert rate_limited_then_ok() == "ok"
+    assert sleeps == [9.0]  # server-specified delay used, not the default backoff

@@ -48,12 +48,18 @@ REPORT_PATH = Path(__file__).resolve().parent / "seed_report.json"
 
 def discover_candidates(city: str, queries: list[str]) -> list[dict]:
     """Casts a wide net: merges OSM results across several diet-intent queries so we
-    don't depend on any single query phrasing surfacing the best candidates."""
+    don't depend on any single query phrasing surfacing the best candidates. A single
+    query failing (the public Overpass instance is shared and occasionally saturated)
+    should never take down the whole multi-city run - skip it and keep going with
+    whatever queries/cities do succeed."""
     seen: dict[str, dict] = {}
     for query in queries:
-        for c in osm_client.search_restaurants(city, query):
-            seen.setdefault(c["id"], c)
-        time.sleep(1)  # be polite to the shared public Overpass instance between queries
+        try:
+            for c in osm_client.search_restaurants(city, query):
+                seen.setdefault(c["id"], c)
+        except Exception as exc:
+            logger.warning("%s: OSM query %r failed, skipping it: %s", city, query, exc)
+        time.sleep(2)  # be polite to the shared public Overpass instance between queries
     return list(seen.values())
 
 
@@ -102,7 +108,13 @@ def main() -> None:
                          help="Give up on a city after this many scrape attempts, successful or not.")
     args = parser.parse_args()
 
-    report = {"cities": [seed_city(city, args.queries, args.target, args.max_attempts) for city in args.cities]}
+    results = []
+    for city in args.cities:
+        try:
+            results.append(seed_city(city, args.queries, args.target, args.max_attempts))
+        except Exception:
+            logger.exception("%s: seeding failed outright, skipping to the next city", city)
+    report = {"cities": results}
 
     REPORT_PATH.write_text(json.dumps(report, indent=2))
     logger.info("Wrote seed report to %s", REPORT_PATH)
