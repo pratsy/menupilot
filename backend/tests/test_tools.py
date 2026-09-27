@@ -4,6 +4,7 @@ from app.agent import tools
 from app.config import settings
 from app.db.models import MenuItem, Restaurant
 from app.db.session import get_session
+from app.schemas import MenuItemLLM
 
 
 def test_looks_relevant_matches_significant_word():
@@ -223,3 +224,35 @@ def test_find_and_scrape_menu_preserves_existing_menu_on_failed_refresh(monkeypa
         restaurant = session.get(Restaurant, "osm:node:pv1")
         assert len(restaurant.menu_items) == 1  # ...but the old good data is still there
         assert restaurant.menu_items[0].translated_name == "Existing Dish"
+
+
+def test_find_and_scrape_menu_replaces_existing_items_on_successful_refresh(monkeypatch):
+    """Regression test: re-scraping a restaurant that already has cached menu_items and
+    getting a real new extraction back must actually replace the old rows, without
+    SQLAlchemy choking on the just-deleted MenuItem instances still referenced by the
+    (stale) relationship collection - this used to raise InvalidRequestError."""
+    city = "ReplaceCity"
+    stale_time = datetime.now(timezone.utc) - timedelta(days=settings.cache_freshness_days + 1)
+    with get_session() as session:
+        session.add(Restaurant(id="osm:node:rp1", name="Refreshed Place", city=city,
+                                official_website="https://example.com",
+                                last_scraped_menu_at=stale_time))
+        session.flush()
+        session.add(MenuItem(restaurant_id="osm:node:rp1", translated_name="Old Dish"))
+
+    monkeypatch.setattr(tools.scraper, "get_menu_text", lambda url: ("some raw text", url))
+    monkeypatch.setattr(
+        tools.llm, "extract_menu_items",
+        lambda text: tools.llm.MenuExtractionResult(items=[
+            MenuItemLLM(translated_name="New Dish", ingredients=["tomato", "basil"]),
+        ]),
+    )
+    monkeypatch.setattr(tools, "upsert_menu_item", lambda *args, **kwargs: None)  # avoid a real embedding call
+    monkeypatch.setattr(tools, "delete_menu_items_for_restaurant", lambda ids: None)
+
+    result = tools.find_and_scrape_menu("osm:node:rp1", "Refreshed Place", city)
+
+    assert [i["name"] for i in result["items"]] == ["New Dish"]
+    with get_session() as session:
+        restaurant = session.get(Restaurant, "osm:node:rp1")
+        assert [mi.translated_name for mi in restaurant.menu_items] == ["New Dish"]

@@ -37,11 +37,19 @@ For each dish/drink you can identify, output an object with:
 - original_description: any description text as written (native language), or ""
 - translated_name: English translation of the name
 - translated_description: English translation of the description, or ""
-- ingredients: a list of English ingredient words, ONLY if the menu text explicitly states them \
-(e.g. from the description). If you must guess likely ingredients from the dish name/type because \
-the menu does not state them, still provide your best-effort list but set ingredients_source to \
-"llm_inferred" instead of "menu_stated". Never fabricate specific allergens or exclusions with false \
-confidence.
+- ingredients: a list of English ingredient words. EVERY item must have a non-empty ingredients list -
+  * If the menu text explicitly states them (e.g. in the description), use those and set \
+ingredients_source to "menu_stated".
+  * Otherwise, you MUST still infer a plausible ingredients list from the dish name/type and set \
+ingredients_source to "llm_inferred" - use your general food knowledge (e.g. "Pizza" -> \
+["dough", "tomato sauce", "cheese"]; "Schnitzel" -> ["breaded cutlet", "lemon"]; "Caesar Salad" -> \
+["romaine lettuce", "parmesan", "croutons", "caesar dressing"]). A bare dish name is still enough \
+information to name its typical base ingredients - only leave the list empty if the name is so opaque \
+(e.g. a proper-noun house special with no cuisine context at all) that even a generic guess would be \
+pure invention, which should be rare.
+  * Never fabricate SPECIFIC allergens or exclusions with false confidence (e.g. don't claim "no nuts" \
+or name an obscure named ingredient you can't support) - stick to the dish's well-known typical \
+components when inferring.
 - ingredients_source: "menu_stated" or "llm_inferred"
 - price: numeric price if present, else null
 - currency: ISO-ish currency symbol/code as seen (e.g. "EUR", "$"), else null

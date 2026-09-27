@@ -60,6 +60,13 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function openLinksInNewWindow(container) {
+  container.querySelectorAll("a[href]").forEach((a) => {
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+  });
+}
+
 async function sendMessage(message) {
   addUserMessage(message);
   const { stepsEl, bubbleEl } = addAssistantMessage();
@@ -122,6 +129,7 @@ async function sendMessage(message) {
     } else if (payload.type === "message") {
       bubbleEl.hidden = false;
       bubbleEl.innerHTML = marked.parse(payload.content || "");
+      openLinksInNewWindow(bubbleEl);
       scrollToBottom();
     } else if (payload.type === "error") {
       bubbleEl.hidden = false;

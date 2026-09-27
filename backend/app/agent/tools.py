@@ -175,8 +175,11 @@ def get_reviews_for_restaurant(restaurant_id: str, name: str, city: str) -> dict
             return {"reviews": [], "note": "No testimonials found on a recent check for this restaurant; not re-attempting yet."}
 
         def _fail(note: str) -> dict:
+            # `restaurant` is already persistent (loaded via _resolve_restaurant), so
+            # mutating it is enough - no session.add() needed, and calling it here
+            # would cascade into any deleted children still referenced by a stale
+            # relationship collection (see the menu equivalent of this function).
             restaurant.review_attempt_failed_at = datetime.now(timezone.utc)
-            session.add(restaurant)
             return {"reviews": [], "note": note}
 
         website = restaurant.official_website
@@ -221,7 +224,6 @@ def get_reviews_for_restaurant(restaurant_id: str, name: str, city: str) -> dict
             return _fail("Website reached but no customer testimonials could be found on it.")
 
         restaurant.review_attempt_failed_at = None
-        session.add(restaurant)
 
         return {
             "reviews": out,
@@ -253,8 +255,10 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
             return {"items": [], "note": "No menu found on a recent check for this restaurant; not re-attempting yet."}
 
         def _fail(note: str) -> dict:
+            # no session.add() here - restaurant is already persistent, and adding it
+            # explicitly cascades into any just-deleted MenuItem children still held by
+            # a stale relationship collection, raising "has been deleted" on flush.
             restaurant.menu_attempt_failed_at = datetime.now(timezone.utc)
-            session.add(restaurant)
             return {"items": [], "note": note}
 
         website = restaurant.official_website
@@ -326,7 +330,6 @@ def find_and_scrape_menu(restaurant_id: str, name: str, city: str) -> dict:
 
         restaurant.last_scraped_menu_at = datetime.now(timezone.utc)
         restaurant.menu_attempt_failed_at = None
-        session.add(restaurant)
 
         return {"items": items_out, "source_url": source_url, "cached": False}
 

@@ -44,10 +44,24 @@ an independent review platform - so they will almost always skew positive, since
 quotes that flatter it. When get_reviews_for_restaurant returns a 'caveat', pass that caveat's substance on \
 to the user near the reviews (in your own words is fine) rather than presenting the testimonials as if they \
 were a balanced, independent set of positive and negative reviews. If none are found, say so plainly.
-7. Your final answer should, per recommended restaurant: name + address, why it fits, a few concrete menu \
-items with prices (flagging inferred ingredients), what the restaurant's own testimonials say (with the \
-skew caveat) and anything review-specific to this user's context, and links (OpenStreetMap listing, official \
-website, and menu page if different). Use clear markdown with headers per restaurant.
+7. Your final answer must follow this exact structure, per recommended restaurant, as a markdown header \
+followed by a table - do not fall back to prose-only bullet points for the menu part:
+
+### <Restaurant name>
+**Address:** <address> · **Links:** [OpenStreetMap](<osm_url>) · [Website](<official_website>) \
+· [Menu](<menu source_url>, only if different from the website)
+
+<one line on why it fits the user's request>
+
+| Dish | Price | Ingredients |
+|---|---|---|
+| <translated name, original name in parentheses if useful> | <price + currency, or "—" if unknown> | \
+<comma-separated ingredient list, ALWAYS present for every row - if ingredients_source is "llm_inferred", \
+append " (inferred, not menu-stated - confirm with restaurant)" to that cell> |
+
+Include every dish you actually looked at from find_and_scrape_menu/semantic_search_menu_items for that \
+restaurant, not just one or two examples - the table is the point, not decoration. Then a short \
+**Testimonials** section (with the skew caveat folded in) or "No testimonials found" if none.
 8. Be transparent about your process as you go, but keep the final write-up focused on the recommendations \
 themselves, not a recap of your steps."""
 
