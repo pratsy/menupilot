@@ -3,7 +3,7 @@ const composer = document.getElementById("composer");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("send");
 
-const sessionId = (() => {
+let sessionId = (() => {
   let id = localStorage.getItem("eff_session_id");
   if (!id) {
     id = crypto.randomUUID();
@@ -28,9 +28,36 @@ function addAssistantMessage() {
   chat.appendChild(wrap);
   scrollToBottom();
   return {
+    wrapEl: wrap,
     stepsEl: wrap.querySelector(".steps"),
     bubbleEl: wrap.querySelector(".bubble"),
   };
+}
+
+// The entire conversation is replayed to the model on every turn, so an old
+// exclusion or city can otherwise bleed into a search that has nothing to do with
+// it. Rather than guess when a message is "really" a new search, offer an explicit,
+// honest reset: a new session id starts the backend's history clean, no fuzzy
+// detection involved. Shown only after an actual set of recommendations (a table or
+// a restaurant heading), not after a plain clarifying question.
+function looksLikeCompletedSearch(markdown) {
+  return /\|\s*Dish\s*\|/i.test(markdown || "") || /^###\s/m.test(markdown || "");
+}
+
+function addNewSearchPrompt(wrapEl) {
+  const row = document.createElement("div");
+  row.className = "next-move";
+  row.innerHTML = `<span>Keep going on this, or</span> <button type="button" class="new-search">🧭 start a new search</button>`;
+  row.querySelector("button").addEventListener("click", startNewSearch);
+  wrapEl.appendChild(row);
+}
+
+function startNewSearch() {
+  sessionId = crypto.randomUUID();
+  localStorage.setItem("eff_session_id", sessionId);
+  chat.innerHTML = "";
+  showGreeting();
+  input.focus();
 }
 
 // Cities with a verified, ready-to-go cache right now - kept in sync by hand with
@@ -117,7 +144,7 @@ function openLinksInNewWindow(container) {
 
 async function sendMessage(message) {
   addUserMessage(message);
-  const { stepsEl, bubbleEl } = addAssistantMessage();
+  const { wrapEl, stepsEl, bubbleEl } = addAssistantMessage();
   let pendingStepLine = null;
 
   sendBtn.disabled = true;
@@ -178,6 +205,7 @@ async function sendMessage(message) {
       bubbleEl.hidden = false;
       bubbleEl.innerHTML = marked.parse(payload.content || "");
       openLinksInNewWindow(bubbleEl);
+      if (looksLikeCompletedSearch(payload.content)) addNewSearchPrompt(wrapEl);
       scrollToBottom();
     } else if (payload.type === "error") {
       bubbleEl.hidden = false;

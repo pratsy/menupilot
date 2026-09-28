@@ -383,6 +383,31 @@ def _auto_exclusions_from_query(query: str) -> list[str]:
     return extra
 
 
+def _enrich_with_restaurant_identity(items: list[dict]) -> list[dict]:
+    """These results only carry restaurant_id, which forces the model to mentally
+    map id -> name/address from earlier context when writing its final answer - a
+    real bug caught live: it mismatched a dish to the wrong restaurant's address and
+    invented a name for the result ("Tofu Ali") rather than getting this right. Stamp
+    the real name/address onto every row here so there's nothing left to reconstruct
+    or guess - the fix is giving the model the right data, not asking it to be more
+    careful with the wrong data."""
+    ids = {i["restaurant_id"] for i in items if i.get("restaurant_id")}
+    if not ids:
+        return items
+    with get_session() as session:
+        # extract plain values while the session is open - the ORM objects
+        # themselves become unusable once it closes (DetachedInstanceError)
+        identities = {
+            rid: (r.name, r.address) if (r := session.get(Restaurant, rid)) else (None, None)
+            for rid in ids
+        }
+    for item in items:
+        name, address = identities.get(item.get("restaurant_id"), (None, None))
+        item["restaurant_name"] = name
+        item["restaurant_address"] = address
+    return items
+
+
 def semantic_search_menu_items(restaurant_ids: list[str], query: str, exclude_ingredients: list[str] | None = None) -> list[dict]:
     """Hybrid retrieval over already-scraped menu items: vector similarity for the
     *soft* part of the query (e.g. "something light and comforting"), reranked by
@@ -399,7 +424,8 @@ def semantic_search_menu_items(restaurant_ids: list[str], query: str, exclude_in
             if not any(ex in (c.get("ingredients") or "").lower() for ex in excluded_lower)
         ]
 
-    return rerank.rerank(query, candidates, text_key="text", top_k=8)
+    ranked = rerank.rerank(query, candidates, text_key="text", top_k=8)
+    return _enrich_with_restaurant_identity(ranked)
 
 
 def semantic_search_reviews(restaurant_ids: list[str], query: str) -> list[dict]:
@@ -410,4 +436,5 @@ def semantic_search_reviews(restaurant_ids: list[str], query: str) -> list[dict]
                 get_reviews_for_restaurant(rid, restaurant.name, restaurant.city)
 
     candidates = vector_search_reviews(query, restaurant_ids, n_results=15)
-    return rerank.rerank(query, candidates, text_key="text", top_k=6)
+    ranked = rerank.rerank(query, candidates, text_key="text", top_k=6)
+    return _enrich_with_restaurant_identity(ranked)

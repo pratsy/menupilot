@@ -89,7 +89,10 @@ TOOLS = [
                 "ingredient list, so it's safe to rely on (still double-check ingredients_source on results, "
                 "since 'llm_inferred' items were not confirmed by the menu text itself, and tell the user "
                 "so for anything allergy-related). Each result also has category: 'food' or 'drink' - never "
-                "present a 'drink' item as satisfying a meal (breakfast/lunch/dinner) request."
+                "present a 'drink' item as satisfying a meal (breakfast/lunch/dinner) request. Each result "
+                "also carries restaurant_name and restaurant_address directly - always use those verbatim "
+                "when writing up a dish, never reconstruct which restaurant a dish belongs to from memory "
+                "or from restaurant_id alone, that's how a wrong name/address gets written into an answer."
             ),
             "parameters": {
                 "type": "object",
@@ -114,7 +117,9 @@ TOOLS = [
                 "Semantically search already-fetched reviews across one or more shortlisted restaurants for "
                 "passages relevant to the CURRENT user's specific context, e.g. 'vegetarian options', "
                 "'good for solo travellers', 'slow service', 'mushrooms'. Use this to find reviews that speak "
-                "directly to what this user cares about, not just generic star ratings."
+                "directly to what this user cares about, not just generic star ratings. Each result carries "
+                "restaurant_name directly - use it verbatim, don't reconstruct which restaurant a quote "
+                "belongs to from restaurant_id or memory."
             ),
             "parameters": {
                 "type": "object",

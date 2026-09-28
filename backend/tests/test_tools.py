@@ -293,3 +293,43 @@ def test_semantic_search_menu_items_auto_excludes_dairy_even_without_explicit_pa
 
     assert len(results) == 1
     assert results[0]["text"] == "Tomato Bruschetta"
+
+
+def test_enrich_with_restaurant_identity_stamps_real_name_and_address():
+    """Regression test for a real bug seen live: semantic_search_menu_items only
+    carried restaurant_id, forcing the model to reconstruct which restaurant a dish
+    belonged to from memory - it got this wrong, inventing a name ("Tofu Ali") and
+    mismatching an address. Results must carry the real name/address directly."""
+    city = "EnrichCity"
+    with get_session() as session:
+        session.add(Restaurant(id="osm:node:enrich1", name="Andaz", city=city,
+                                address="66 Waidmannsluster Damm 13509 Berlin"))
+
+    items = [{"restaurant_id": "osm:node:enrich1", "text": "Tofu Curry"}]
+    enriched = tools._enrich_with_restaurant_identity(items)
+
+    assert enriched[0]["restaurant_name"] == "Andaz"
+    assert enriched[0]["restaurant_address"] == "66 Waidmannsluster Damm 13509 Berlin"
+
+
+def test_enrich_with_restaurant_identity_handles_unknown_id_gracefully():
+    items = [{"restaurant_id": "osm:node:does-not-exist", "text": "Mystery Dish"}]
+    enriched = tools._enrich_with_restaurant_identity(items)
+    assert enriched[0]["restaurant_name"] is None
+    assert enriched[0]["restaurant_address"] is None
+
+
+def test_semantic_search_menu_items_results_carry_restaurant_name(monkeypatch):
+    city = "EnrichCity2"
+    with get_session() as session:
+        session.add(Restaurant(id="osm:node:enrich2", name="Aapka", city=city, address="Somewhere"))
+
+    candidates = [{"text": "Dal Makhani", "restaurant_id": "osm:node:enrich2", "price": 10.0,
+                   "currency": "EUR", "ingredients": "lentils, butter", "ingredients_source": "menu_stated",
+                   "category": "food"}]
+    monkeypatch.setattr(tools, "vector_search_menu_items", lambda query, restaurant_ids, n_results=20: candidates)
+    monkeypatch.setattr(tools.rerank, "rerank", lambda query, items, text_key="text", top_k=None: items)
+
+    results = tools.semantic_search_menu_items(["osm:node:enrich2"], "comforting")
+
+    assert results[0]["restaurant_name"] == "Aapka"

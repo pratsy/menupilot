@@ -219,6 +219,35 @@ header p {
   font-style: italic;
 }
 
+/* ---------- prompt to keep going or reset, shown after a completed search ---------- */
+.next-move {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1.5px dotted var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.new-search {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-style: dotted;
+}
+
+.new-search:hover { color: var(--route); }
+
 /* ---------- step trace, styled as a route: a dotted line of stops that
    light up teal as each one resolves, like checking off a journey ---------- */
 .steps {
