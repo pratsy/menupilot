@@ -20,7 +20,11 @@ include or avoid (allergies, dislikes, "no mushrooms", "no chicken", etc.).
 
 Ground rules:
 1. If you don't yet know the city, which meal, and any dietary restrictions or ingredients to avoid, \
-ASK before searching. Keep questions short and specific. Don't ask about things the user already told you.
+ASK before searching. Keep questions short and specific. Don't ask about things the user already told you. \
+NEVER pick a city yourself when the user hasn't named one - not Berlin, not a city you have cached data \
+for, not the "most likely" one. Having pre-seeded data for a city is not permission to assume that's what \
+the user meant; if no city has been named anywhere in this conversation, your only move is to ask which \
+city, not to call search_restaurants at all.
 2. ALWAYS respond in English only, no matter what language menus, reviews, or restaurant names are in \
 originally. Translate everything into English for the user; you may keep an original dish name in \
 parentheses for authenticity.
@@ -198,6 +202,23 @@ def _drop_empty_restaurant_sections(markdown: str) -> str:
     return "\n".join(line for section in kept for line in section)
 
 
+def _city_mentioned_by_user(city: str, history: list[dict]) -> bool:
+    """Deterministic guard, not just a prompt instruction: live testing showed the
+    model defaulting to a city it had cached data for (Berlin) when the user never
+    named one, instead of asking - the same class of bug as the dairy-exclusion case,
+    fixed the same way. Works for any city, since it only checks whether the exact
+    string the model wants to search for was ever actually typed by the user, rather
+    than maintaining a list of valid city names."""
+    city_lower = (city or "").strip().lower()
+    if not city_lower:
+        return False
+    return any(
+        city_lower in (msg.get("content") or "").lower()
+        for msg in history
+        if msg.get("role") == "user"
+    )
+
+
 def _describe_call(name: str, args: dict) -> str:
     if name == "search_restaurants":
         return f"🔍 Searching restaurants in {args.get('city')} for \"{args.get('query')}\"..."
@@ -293,14 +314,23 @@ def run_turn(session_id: str, user_message: str) -> Generator[dict, None, None]:
             if name == "semantic_search_menu_items":
                 applied_exclusions.update(e.lower() for e in (args.get("exclude_ingredients") or []))
 
-            impl = TOOL_IMPLS.get(name)
-            try:
-                result = impl(**args) if impl else {"error": f"Unknown tool {name}"}
-                error = None
-            except Exception as exc:  # keep the agent loop alive; surface the failure to the model
-                logger.exception("Tool %s raised an exception", name)
-                result = {"error": str(exc)}
-                error = str(exc)
+            if name == "search_restaurants" and not _city_mentioned_by_user(args.get("city"), history):
+                # Same fix pattern as the dairy-exclusion bug: don't trust the model
+                # not to default to a city it has cached data for. Refuse the call
+                # deterministically and let the model see why, so its next turn asks
+                # the user instead of guessing.
+                logger.info("Refused search_restaurants: city %r was never mentioned by the user", args.get("city"))
+                error = f"\"{args.get('city')}\" was never mentioned by the user anywhere in this conversation - do not guess a city. Ask the user which city they mean instead of calling this tool again."
+                result = {"error": error}
+            else:
+                impl = TOOL_IMPLS.get(name)
+                try:
+                    result = impl(**args) if impl else {"error": f"Unknown tool {name}"}
+                    error = None
+                except Exception as exc:  # keep the agent loop alive; surface the failure to the model
+                    logger.exception("Tool %s raised an exception", name)
+                    result = {"error": str(exc)}
+                    error = str(exc)
 
             yield {
                 "type": "step_result",

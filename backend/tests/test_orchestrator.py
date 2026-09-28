@@ -1,4 +1,5 @@
 from app.agent.orchestrator import (
+    _city_mentioned_by_user,
     _drop_empty_restaurant_sections,
     _strip_empty_placeholder_rows,
     _strip_noncompliant_dish_rows,
@@ -122,3 +123,42 @@ def test_keeps_trailing_footnote_even_if_last_restaurant_is_dropped():
     result = _drop_empty_restaurant_sections(_strip_empty_placeholder_rows(markdown))
     assert "Empty Place" not in result
     assert "✓ = ingredient list confirmed" in result
+
+
+def test_city_mentioned_by_user_true_when_present():
+    history = [
+        {"role": "system", "content": "..."},
+        {"role": "user", "content": "I'm in Barcelona, vegetarian dinner"},
+    ]
+    assert _city_mentioned_by_user("Barcelona", history) is True
+
+
+def test_city_mentioned_by_user_false_when_model_invents_it():
+    """Regression test for a real bug seen live: the agent called search_restaurants
+    with city="Berlin" when the user never said any city at all - it defaulted to the
+    city it had the most cached data for instead of asking."""
+    history = [
+        {"role": "system", "content": "..."},
+        {"role": "user", "content": "vegetarian dinner, no mushrooms"},
+    ]
+    assert _city_mentioned_by_user("Berlin", history) is False
+
+
+def test_city_mentioned_by_user_is_case_insensitive():
+    history = [{"role": "user", "content": "thinking about BARCELONA for dinner"}]
+    assert _city_mentioned_by_user("barcelona", history) is True
+
+
+def test_city_mentioned_by_user_checks_earlier_turns_too():
+    """A city named in an earlier turn still grounds a later turn that doesn't repeat it."""
+    history = [
+        {"role": "user", "content": "I'm in Rome"},
+        {"role": "assistant", "content": "What meal are you looking for?"},
+        {"role": "user", "content": "dinner, vegan"},
+    ]
+    assert _city_mentioned_by_user("Rome", history) is True
+
+
+def test_city_mentioned_by_user_false_for_empty_city():
+    assert _city_mentioned_by_user("", [{"role": "user", "content": "Barcelona"}]) is False
+    assert _city_mentioned_by_user(None, [{"role": "user", "content": "Barcelona"}]) is False
