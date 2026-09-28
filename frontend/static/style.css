@@ -1,13 +1,16 @@
 :root {
-  --bg: #faf8f5;
-  --panel: #ffffff;
-  --border: #e6e1d8;
-  --text: #2b2621;
-  --muted: #8a8175;
-  --accent: #c1502e;
-  --accent-soft: #fbeee7;
-  --user-bubble: #2b2621;
-  --user-text: #ffffff;
+  --bg: #f6efe1;
+  --panel: #fbf6ea;
+  --panel-2: #eee1c4;
+  --border: #ddcca3;
+  --text: #2b2013;
+  --muted: #7a6b52;
+  --accent: #c2571c;
+  --accent-soft: #f3ddc7;
+  --route: #1f5d6e;
+  --route-soft: #dbe8e6;
+  --user-bubble: #2b2013;
+  --user-text: #f6efe1;
 }
 
 * { box-sizing: border-box; }
@@ -17,7 +20,7 @@ html, body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: "Karla", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 #app {
@@ -29,19 +32,38 @@ html, body {
 }
 
 header {
-  padding: 20px 16px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 18px 16px 14px;
+  border-bottom: 1.5px dotted var(--border);
 }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.compass {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.compass .needle { color: var(--route); }
 
 header h1 {
   margin: 0;
-  font-size: 20px;
+  font-family: "Bricolage Grotesque", "Karla", sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: -0.01em;
 }
 
 header p {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--muted);
   font-size: 13px;
+  font-style: italic;
 }
 
 #chat {
@@ -50,7 +72,7 @@ header p {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .msg {
@@ -70,8 +92,8 @@ header p {
 }
 
 .bubble {
-  padding: 10px 14px;
-  border-radius: 14px;
+  padding: 11px 15px;
+  border-radius: 4px 14px 14px 14px;
   line-height: 1.5;
   font-size: 14.5px;
 }
@@ -79,22 +101,25 @@ header p {
 .msg.user .bubble {
   background: var(--user-bubble);
   color: var(--user-text);
-  border-bottom-right-radius: 4px;
+  border-radius: 14px 4px 14px 14px;
 }
 
 .msg.assistant .bubble {
   background: var(--panel);
-  border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
+  border: 1.5px dotted var(--border);
 }
 
 .bubble p:first-child { margin-top: 0; }
 .bubble p:last-child { margin-bottom: 0; }
-.bubble a { color: var(--accent); }
-.bubble h1, .bubble h2, .bubble h3 { font-size: 15px; margin: 14px 0 6px; }
+.bubble a { color: var(--accent); font-weight: 600; }
+.bubble h1, .bubble h2, .bubble h3 {
+  font-family: "Bricolage Grotesque", "Karla", sans-serif;
+  font-size: 15.5px;
+  margin: 16px 0 6px;
+}
 .bubble h3:first-child { margin-top: 0; }
 .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
-.bubble hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+.bubble hr { border: none; border-top: 1.5px dotted var(--border); margin: 14px 0; }
 
 .bubble table {
   width: 100%;
@@ -116,10 +141,10 @@ header p {
 
 .bubble th {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
+  letter-spacing: 0.04em;
+  color: var(--route);
   white-space: nowrap;
 }
 
@@ -132,41 +157,63 @@ header p {
 
 .bubble em { color: var(--muted); font-size: 12.5px; }
 
+/* ---------- step trace, styled as a route: a dotted line of stops that
+   light up teal as each one resolves, like checking off a journey ---------- */
 .steps {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-bottom: 6px;
+  gap: 9px;
+  margin: 2px 0 10px 5px;
+  padding-left: 16px;
+  border-left: 1.5px dotted var(--border);
   font-size: 12.5px;
   color: var(--muted);
 }
 
 .step-line {
+  position: relative;
   display: flex;
   gap: 6px;
   align-items: baseline;
 }
 
+.step-line::before {
+  content: "";
+  position: absolute;
+  left: -20.5px;
+  top: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1.5px solid var(--muted);
+}
+
+.step-line:not(.pending)::before {
+  background: var(--route);
+  border-color: var(--route);
+}
+
 .step-line .result {
-  color: #6b7d5f;
+  color: var(--route);
 }
 
 .step-line.pending {
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 #composer {
   display: flex;
   gap: 8px;
   padding: 12px 16px 18px;
-  border-top: 1px solid var(--border);
+  border-top: 1.5px dotted var(--border);
   background: var(--bg);
 }
 
 #input {
   flex: 1;
   resize: none;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 14.5px;
@@ -176,6 +223,8 @@ header p {
   max-height: 140px;
 }
 
+#input::placeholder { color: var(--muted); opacity: 0.85; }
+
 #input:focus {
   outline: none;
   border-color: var(--accent);
@@ -184,13 +233,20 @@ header p {
 #send {
   border: none;
   background: var(--accent);
-  color: white;
+  color: var(--panel);
   border-radius: 10px;
-  padding: 0 18px;
-  font-size: 14px;
+  padding: 0 20px;
+  font-family: "Bricolage Grotesque", "Karla", sans-serif;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
+
+#send span { transition: transform 0.15s ease; }
+#send:hover:not(:disabled) span { transform: translateX(2px); }
 
 #send:disabled {
   opacity: 0.5;
@@ -199,14 +255,17 @@ header p {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #171512;
-    --panel: #201d19;
-    --border: #33302a;
-    --text: #f0ece5;
-    --muted: #a39a8c;
-    --accent: #e07a52;
-    --accent-soft: #3a2620;
-    --user-bubble: #e07a52;
-    --user-text: #1c1512;
+    --bg: #191410;
+    --panel: #221c15;
+    --panel-2: #2c2419;
+    --border: #453a28;
+    --text: #f1e6d2;
+    --muted: #ad9d7c;
+    --accent: #e2823f;
+    --accent-soft: #3a2a17;
+    --route: #5fb0af;
+    --route-soft: #1d2e2c;
+    --user-bubble: #e2823f;
+    --user-text: #1a130a;
   }
 }
