@@ -33,6 +33,15 @@ function addAssistantMessage() {
   };
 }
 
+// Cities with a verified, ready-to-go cache right now - kept in sync by hand with
+// what's actually been seeded (see backend/scripts/seed_report.json). Anywhere else
+// still works, it just means a live scout instead of an instant one.
+const READY_DESTINATIONS = [
+  { city: "Barcelona", flavor: "tapas country" },
+  { city: "Rome", flavor: "pasta and piazzas" },
+  { city: "Berlin", flavor: "currywurst and canals" },
+];
+
 // A greeting the platform opens with, so the chat never starts on a blank page
 // waiting for the traveler to guess what to say. Purely a frontend touch - it
 // never reaches the backend or the model, which asks the same things on its own
@@ -43,8 +52,33 @@ function showGreeting() {
   bubbleEl.innerHTML = marked.parse(
     "Wherever you've landed, I've got you. Tell me the **city** and what you're **craving** " +
     "— vegetarian, vegan, allergic to something, just picky — and I'll scout out the real places, " +
-    "not the tourist traps."
+    "not the tourist traps.\n\n" +
+    "Passport's fully stamped for **Barcelona, Rome, and Berlin** — those get the full scout, " +
+    "instantly. Name anywhere else in Europe and I'll still go looking, just live, on the spot."
   );
+  addDestinationChips();
+}
+
+function addDestinationChips() {
+  const wrap = document.createElement("div");
+  wrap.className = "destinations";
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", "Ready-to-go destinations");
+
+  READY_DESTINATIONS.forEach(({ city, flavor }) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "stamp";
+    chip.innerHTML = `<span class="stamp-city">${escapeHtml(city)}</span><span class="stamp-flavor">${escapeHtml(flavor)}</span>`;
+    chip.addEventListener("click", () => {
+      wrap.remove();
+      sendMessage(`I've just landed in ${city} — what's good to eat?`);
+    });
+    wrap.appendChild(chip);
+  });
+
+  chat.appendChild(wrap);
+  scrollToBottom();
 }
 
 function scrollToBottom() {

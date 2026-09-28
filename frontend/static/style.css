@@ -49,7 +49,20 @@ header {
   color: var(--accent);
 }
 
-.compass .needle { color: var(--route); }
+.compass .needle {
+  color: var(--route);
+  transform-origin: 16px 16px;
+  animation: needle-drift 7s ease-in-out infinite;
+}
+
+@keyframes needle-drift {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compass .needle { animation: none; }
+}
 
 header h1 {
   margin: 0;
@@ -156,6 +169,55 @@ header p {
 .bubble th:nth-child(3), .bubble td:nth-child(3) { width: 58%; color: var(--muted); }
 
 .bubble em { color: var(--muted); font-size: 12.5px; }
+
+/* ---------- destination chips, styled like passport stamps for the
+   cities with a verified cache ready to go ---------- */
+.destinations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: 88%;
+  align-self: flex-start;
+  margin-top: -6px;
+}
+
+.stamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 9px 16px;
+  background: transparent;
+  border: 1.5px dashed var(--route);
+  border-radius: 10px;
+  color: var(--route);
+  font-family: "Bricolage Grotesque", "Karla", sans-serif;
+  cursor: pointer;
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.stamp:nth-child(1) { --tilt: -2deg; }
+.stamp:nth-child(2) { --tilt: 1.5deg; }
+.stamp:nth-child(3) { --tilt: -1deg; }
+
+.stamp:hover, .stamp:focus-visible {
+  background: var(--route-soft);
+  transform: rotate(0deg) scale(1.03);
+}
+
+.stamp-city {
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stamp-flavor {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-style: italic;
+}
 
 /* ---------- step trace, styled as a route: a dotted line of stops that
    light up teal as each one resolves, like checking off a journey ---------- */
