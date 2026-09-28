@@ -13,10 +13,16 @@ logger = logging.getLogger(__name__)
 
 _client = OpenAI(api_key=settings.openai_api_key)
 
-SYSTEM_PROMPT = """You are a European restaurant concierge for travellers, specialised in vegetarian \
-and dietary-restriction-aware dining. You help the user find real restaurants in a specific city for a \
-specific meal (breakfast/lunch/dinner), matching their dietary needs and any ingredients they want to \
-include or avoid (allergies, dislikes, "no mushrooms", "no chicken", etc.).
+SYSTEM_PROMPT = """You are Wayfare: a well-travelled friend who's actually eaten their way through \
+European cities, not a formal hotel concierge. You help the user find real restaurants in a specific city \
+for a specific meal (breakfast/lunch/dinner), matching their dietary needs and any ingredients they want \
+to include or avoid (allergies, dislikes, "no mushrooms", "no chicken", etc.) - steering them toward what's \
+actually good and actually safe to eat, away from tourist traps.
+
+Voice: warm, direct, a little adventurous - like someone texting a friend who just landed somewhere new, \
+not reading from a script. This is about tone only. It never relaxes rules 3-7 below: every fact you state \
+still has to come from a tool call, every exclusion still gets enforced exactly as strictly, nothing about \
+"friendly" means "looser."
 
 Ground rules:
 1. If you don't yet know the city, which meal, and any dietary restrictions or ingredients to avoid, \
@@ -80,7 +86,7 @@ restaurants.> |
 Include every dish that genuinely qualifies (matches the meal/diet/exclusions per rules 4b and 5c) from \
 find_and_scrape_menu/semantic_search_menu_items for that restaurant - not just one or two cherry-picked \
 examples, but also not padded with disqualified or irrelevant items just to make the table longer. Then a \
-short **Testimonials** section (with the skew caveat folded in) or "No testimonials found" if none.
+short **What locals say** section (with the skew caveat folded in) or "Nothing from locals yet" if none.
 7c. End the WHOLE message (once, after every restaurant section, not per-table) with a single line: \
 "*✓ = ingredient list confirmed on the restaurant's own menu; everything else is inferred from the dish \
 name and not confirmed - always double check with the restaurant, especially for allergies.*" Skip this \
@@ -221,38 +227,38 @@ def _city_mentioned_by_user(city: str, history: list[dict]) -> bool:
 
 def _describe_call(name: str, args: dict) -> str:
     if name == "search_restaurants":
-        return f"🔍 Searching restaurants in {args.get('city')} for \"{args.get('query')}\"..."
+        return f"🧭 Scouting {args.get('city')} for \"{args.get('query')}\"..."
     if name == "find_and_scrape_menu":
-        return f"📋 Reading and translating the menu for {args.get('name')}..."
+        return f"📋 Reading {args.get('name')}'s menu, translating as I go..."
     if name == "get_reviews_for_restaurant":
-        return f"⭐ Looking for customer testimonials on {args.get('name')}'s website..."
+        return f"⭐ Checking what locals say about {args.get('name')}..."
     if name == "semantic_search_menu_items":
         n = len(args.get("restaurant_ids") or [])
         excl = args.get("exclude_ingredients") or []
-        excl_note = f", excluding {', '.join(excl)}" if excl else ""
-        return f"🍽️ Searching {n} restaurant's menus for \"{args.get('query')}\"{excl_note}..."
+        excl_note = f", ruling out {', '.join(excl)}" if excl else ""
+        return f"🍽️ Hunting through {n} menu(s) for \"{args.get('query')}\"{excl_note}..."
     if name == "semantic_search_reviews":
-        return f"🔎 Searching reviews for \"{args.get('query')}\"..."
+        return f"🔎 Digging through reviews for \"{args.get('query')}\"..."
     return f"Running {name}..."
 
 
 def _describe_result(name: str, result) -> str:
     if name == "search_restaurants":
-        return f"Found {len(result)} candidate restaurant(s)."
+        return f"Found {len(result)} lead(s)."
     if name == "find_and_scrape_menu":
         items = result.get("items", [])
         if not items:
             return result.get("note", "No menu items found.")
-        return f"Extracted {len(items)} menu item(s)."
+        return f"Found {len(items)} dish(es) on the menu."
     if name == "get_reviews_for_restaurant":
         reviews = result.get("reviews", [])
         if not reviews:
-            return result.get("note", "No testimonials found.")
-        return f"Found {len(reviews)} testimonial(s) on the restaurant's site."
+            return result.get("note", "Nothing from locals yet.")
+        return f"{len(reviews)} word(s) from locals."
     if name == "semantic_search_menu_items":
-        return f"Found {len(result)} matching dish(es)." if result else "No matching dishes found."
+        return f"Found {len(result)} matching dish(es)." if result else "Nothing matched."
     if name == "semantic_search_reviews":
-        return f"Found {len(result)} relevant review passage(s)."
+        return f"Found {len(result)} relevant passage(s)." if result else "Nothing relevant turned up."
     return "Done."
 
 
@@ -343,4 +349,4 @@ def run_turn(session_id: str, user_message: str) -> Generator[dict, None, None]:
                 "content": json.dumps(result, default=str),
             })
 
-    yield {"type": "message", "content": "I wasn't able to finish gathering everything in time — could you narrow your request a bit (e.g. one city, one meal)?"}
+    yield {"type": "message", "content": "I got a bit lost scouting that one — could you narrow it down a bit (one city, one meal) and I'll try again?"}

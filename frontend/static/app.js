@@ -33,6 +33,20 @@ function addAssistantMessage() {
   };
 }
 
+// A greeting the platform opens with, so the chat never starts on a blank page
+// waiting for the traveler to guess what to say. Purely a frontend touch - it
+// never reaches the backend or the model, which asks the same things on its own
+// once a real message arrives; this just makes the first impression proactive.
+function showGreeting() {
+  const { bubbleEl } = addAssistantMessage();
+  bubbleEl.hidden = false;
+  bubbleEl.innerHTML = marked.parse(
+    "Wherever you've landed, I've got you. Tell me the **city** and what you're **craving** " +
+    "— vegetarian, vegan, allergic to something, just picky — and I'll scout out the real places, " +
+    "not the tourist traps."
+  );
+}
+
 function scrollToBottom() {
   chat.scrollTop = chat.scrollHeight;
 }
@@ -98,7 +112,7 @@ async function sendMessage(message) {
     }
   } catch (err) {
     bubbleEl.hidden = false;
-    bubbleEl.textContent = `Something went wrong: ${err}`;
+    bubbleEl.textContent = `Hit a snag on the road: ${err}`;
   } finally {
     sendBtn.disabled = false;
   }
@@ -158,3 +172,5 @@ input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 140) + "px";
 });
+
+showGreeting();
